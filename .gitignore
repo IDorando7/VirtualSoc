@@ -1,0 +1,12 @@
+# Build directories
+build/
+cmake-build-debug/
+cmake-build-release/
+
+# JetBrains config folder
+.idea/
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+
