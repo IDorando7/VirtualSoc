@@ -9,4 +9,8 @@ cmake-build-release/
 # CMake files
 CMakeFiles/
 CMakeCache.txt
+CMakeLists.txt
+.idea/
 
+client_app
+server_app

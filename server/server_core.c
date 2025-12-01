@@ -1,14 +1,15 @@
 #include "server.h"
 #include "common.h"
 #include "models.h"
+#include "command_dispatch.h"
 
-static void *treat(void *);
+static void *client_handler(void *);
 void answer(void *);
 
 int server_start(int port)
 {
     struct sockaddr_in server;
-
+    int sd;
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("[server] Error at socket creation.\n");
@@ -40,7 +41,7 @@ int server_start(int port)
     return sd;
 }
 
-void server_run()
+void server_run(int sd)
 {
     struct sockaddr_in from;
     pthread_t th[MAX_ID_THREADS];
@@ -64,24 +65,19 @@ void server_run()
         td -> id_thread = i++;
         td -> client = client;
 
-        pthread_create(&th[i], NULL, &treat, td);
+        pthread_create(&th[i], NULL, &client_handler, td);
     }
 }
 
-static void *treat(void * arg)
+static void *client_handler(void * arg)
 {
     struct thData tdL;
     tdL = *(struct thData*)arg;
     printf ("[thread]- %d - Waiting the message...\n", tdL.id_thread);
     fflush (stdout);
     pthread_detach(pthread_self());
-    answer(arg);
+    command_dispatch(arg);
     close ((intptr_t)arg);
     return NULL;
-
-}
-
-void answer(void *arg)
-{
 
 }

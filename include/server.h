@@ -6,7 +6,5 @@ struct thData
     int client;
 };
 
-int sd; // socket fd
-
 int server_start(int port);
-void server_run();
+void server_run(int sd);

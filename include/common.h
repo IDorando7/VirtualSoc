@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <pthread.h>
+#include <arpa/inet.h>
+#include <stdint.h>
 
 
 #define PORT 2908

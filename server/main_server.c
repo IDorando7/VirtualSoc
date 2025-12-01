@@ -3,8 +3,8 @@
 
 int main(void)
 {
-    server_start(PORT);
-    server_run();
+    int sockfd = server_start(PORT);
+    server_run(sockfd);
 
     return 0;
 }
