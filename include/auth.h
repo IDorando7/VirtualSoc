@@ -12,8 +12,8 @@
 #define AUTH_ERR_NO_SLOT        4
 #define AUTH_ERR_UNKNOWN        5
 
-int auth_register(const char *username);
-int auth_login(int client_fd, const char *username);
+int auth_register(const char *username, const char* password);
+int auth_login(int client_fd, const char *username, const char* password);
 int auth_logout(int client_fd);
 
 int auth_get_user_id(int client_fd);

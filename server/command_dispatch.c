@@ -29,13 +29,13 @@ void command_dispatch(void * arg)
     // register
     if (strcmp(cmd, CMD_REGISTER) == 0)
     {
-        if (!(arg1 != NULL && arg2 == NULL))
+        if (!(arg1 != NULL && arg2 != NULL))
         {
-            build_error(response, ERR_BAD_ARGS, "Usage: register <user>");
+            build_error(response, ERR_BAD_ARGS, "Usage: register <user> <pass>");
             write(tdL.client, response, strlen(response));
             return;
         }
-        int ok = auth_register(arg1);
+        int ok = auth_register(arg1, arg2);
         if (ok == 0)
             build_ok(response, "Register successful");
         else if (ok == 1)
@@ -56,7 +56,7 @@ void command_dispatch(void * arg)
             write(tdL.client, response, strlen(response));
             return;
         }
-        int ok = auth_login(tdL.client, arg1);
+        int ok = auth_login(tdL.client, arg1, arg2);
         if (ok == 0)
             build_ok(response, "Login successful");
         else if (ok == 1)

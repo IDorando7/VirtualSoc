@@ -2,12 +2,12 @@
 #include "protocol_client.h"
 #include "protocol.h"
 
-void cmd_register(int sockfd, char *arg1)
+void cmd_register(int sockfd, char *arg1, char *arg2)
 {
     char buffer[MAX_CMD_LEN];
     char response[MAX_CMD_LEN];
 
-    sprintf(buffer, "%s %s\n", CMD_REGISTER, arg1);
+    sprintf(buffer, "%s %s %s\n", CMD_REGISTER, arg1, arg2);
 
     write(sockfd, buffer, sizeof(buffer));
 
@@ -18,12 +18,12 @@ void cmd_register(int sockfd, char *arg1)
     printf("Server: %s", response);
 }
 
-void cmd_login(int sockfd, char *arg1)
+void cmd_login(int sockfd, char *arg1, char *arg2)
 {
     char buffer[MAX_CMD_LEN];
     char response[MAX_CMD_LEN];
 
-    sprintf(buffer, "%s %s\n", CMD_LOGIN, arg1);
+    sprintf(buffer, "%s %s %s\n", CMD_LOGIN, arg1, arg2);
 
     write(sockfd, buffer, sizeof(buffer));
 

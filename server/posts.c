@@ -1,9 +1,4 @@
-#include <stdio.h>
-#include <sqlite3.h>
-#include <time.h>
-#include <string.h>
-#include <pthread.h>
-
+#include "common.h"
 #include "posts.h"
 #include "storage.h"
 #include "models.h"   // pentru enum post_visibility, enum user_vis, FRIEND_CLOSE

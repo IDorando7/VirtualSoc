@@ -78,23 +78,24 @@ void client_loop(int sockfd)
         // register
         if (strcmp(cmd, "register") == 0)
         {
-            if (arg1[0] == '\0')
+            if (arg1[0] == '\0' || arg2[0] == '\0')
             {
-                printf("Usage: register <user>\n");
+                printf("Usage: register <user> <pass>\n");
                 continue;
             }
-            cmd_register(sockfd, arg1);
+            cmd_register(sockfd, arg1, arg2);
             continue;
         }
 
         // login
         if (strcmp(cmd, "login") == 0)
         {
-            if (arg1[0] == '\0') {
-                printf("Usage: login <user>\n");
+            if (arg1[0] == '\0' || arg2[0] == '\0')
+            {
+                printf("Usage: login <user> <pass>\n");
                 continue;
             }
-            cmd_login(sockfd, arg1);
+            cmd_login(sockfd, arg1, arg2);
             continue;
         }
 

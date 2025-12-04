@@ -1,7 +1,7 @@
 #pragma once
 
-void cmd_register(int sockfd, char *arg1);
-void cmd_login(int sockfd, char *arg1);
+void cmd_register(int sockfd, char *arg1, char *arg2);
+void cmd_login(int sockfd, char *arg1, char *arg2);
 void cmd_logout(int sockfd);
 void cmd_post(int sockfd, char vis_str[], char content[]);
 void cmd_view_public(int sockfd);

@@ -1,168 +1,298 @@
+#include <stdio.h>
+#include <string.h>
+#include <pthread.h>
+#include <sqlite3.h>
+#include <sodium.h>
+
 #include "common.h"
 #include "auth.h"
 #include "models.h"
-#include "protocol.h"
+#include "storage.h"   // g_db, db_mutex
 
-struct Session g_sessions[MAX_SESSIONS];
+/*
+ * Coduri eroare:
+ * AUTH_OK                 0
+ * AUTH_ERR_EXISTS         1
+ * AUTH_ERR_USER_NOT_FOUND 2
+ * AUTH_ERR_WRONG_PASS     3
+ * AUTH_ERR_NO_SLOT        4
+ * AUTH_ERR_UNKNOWN        5
+ */
 
-pthread_mutex_t users_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t sessions_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-void init_sessions_once()
+/*
+ * ============================
+ * inițializare lazy
+ * ============================
+ */
+static void init_auth_once()
 {
     static int initialized = 0;
     if (initialized)
         return;
     initialized = 1;
 
-    for (int i = 0; i < MAX_SESSIONS; i++)
-    {
-        g_sessions[i].client_fd = -1;
-        g_sessions[i].user_id = -1;
+    pthread_mutex_lock(&db_mutex);
+
+    char *errmsg = NULL;
+    int rc;
+
+    // users
+    const char *sql_users =
+        "CREATE TABLE IF NOT EXISTS users ("
+        "  id            INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  name          TEXT UNIQUE NOT NULL,"
+        "  password_hash TEXT NOT NULL,"
+        "  type          INTEGER NOT NULL,"
+        "  vis           INTEGER NOT NULL"
+        ");";
+
+    rc = sqlite3_exec(g_db, sql_users, NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] create users error: %s\n", errmsg);
+        sqlite3_free(errmsg);
     }
-}
 
-int find_user_index_by_name(const char *username)
-{
-    for (int i = 0; i < g_user_count; i++)
-    {
-        if (strcmp(g_users[i].name, username) == 0)
-            return i;
+    // sessions
+    const char *sql_sessions =
+        "CREATE TABLE IF NOT EXISTS sessions ("
+        "  id        INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  client_fd INTEGER UNIQUE NOT NULL,"
+        "  user_id   INTEGER NOT NULL"
+        ");";
+
+    rc = sqlite3_exec(g_db, sql_sessions, NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] create sessions error: %s\n", errmsg);
+        sqlite3_free(errmsg);
     }
-    return -1;
+
+    // reset sesiuni vechi (client_fd nu e persistent)
+    rc = sqlite3_exec(g_db, "DELETE FROM sessions;", NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] clearing sessions error: %s\n", errmsg);
+        sqlite3_free(errmsg);
+    }
+
+    pthread_mutex_unlock(&db_mutex);
 }
 
-int sessions_find_index_by_fd(int client_fd)
+/* helper intern */
+static int db_find_user_id_by_name(const char *username)
 {
-    for (int i = 0; i < MAX_SESSIONS; i++)
-        if (g_sessions[i].client_fd == client_fd)
-            return i;
-    return -1;
+    const char *sql = "SELECT id FROM users WHERE name = ? LIMIT 1;";
+    sqlite3_stmt *stmt;
+    int id = -1;
+
+    pthread_mutex_lock(&db_mutex);
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW)
+        id = sqlite3_column_int(stmt, 0);
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+    return id;
 }
 
-int sessions_find_free_slot()
+/*
+ * ============================
+ * REGISTER (cu hashing)
+ * ============================
+ */
+int auth_register(const char *username, const char *password)
 {
-    for (int i = 0; i < MAX_SESSIONS; i++)
-        if (g_sessions[i].client_fd == -1)
-            return i;
-    return -1;
-}
+    init_auth_once();
 
-int auth_register(const char *username)
-{
-    init_sessions_once();
-
-    pthread_mutex_lock(&users_mutex);
-
-    if (find_user_index_by_name(username) != -1)
-    {
-        pthread_mutex_unlock(&users_mutex);
+    if (db_find_user_id_by_name(username) >= 0)
         return AUTH_ERR_EXISTS;
-    }
 
-    if (g_user_count >= MAX_USERS)
+    // generăm hash Argon2id
+    char hash[crypto_pwhash_STRBYTES];
+
+    if (crypto_pwhash_str(
+            hash,
+            password,
+            strlen(password),
+            crypto_pwhash_OPSLIMIT_INTERACTIVE,
+            crypto_pwhash_MEMLIMIT_INTERACTIVE
+        ) != 0)
     {
-        pthread_mutex_unlock(&users_mutex);
-        return AUTH_ERR_NO_SLOT;
+        return AUTH_ERR_UNKNOWN;
     }
 
-    int id = g_user_count;
-    g_users[id].id = id;
-    strncpy(g_users[id].name, username, sizeof(g_users[id].name) - 1);
-    g_users[id].name[sizeof(g_users[id].name) - 1] = '\0';
-    g_user_count++;
+    const char *sql =
+        "INSERT INTO users(name, password_hash, type, vis) "
+        "VALUES (?, ?, ?, ?);";
 
-    pthread_mutex_unlock(&users_mutex);
+    sqlite3_stmt *stmt;
 
-    //storage_save_users() dacă vrei să salvezi imediat în fișier
+    pthread_mutex_lock(&db_mutex);
 
-    return AUTH_OK;
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
+    }
 
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, hash, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 3, USER_NORMAL);
+    sqlite3_bind_int(stmt, 4, USER_PUBLIC);
+
+    int rc = sqlite3_step(stmt);
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return (rc == SQLITE_DONE) ? AUTH_OK : AUTH_ERR_UNKNOWN;
 }
 
-int auth_login(int client_fd, const char *username)
+/*
+ * ============================
+ * LOGIN (verificare HASH)
+ * ============================
+ */
+int auth_login(int client_fd, const char *username, const char *password)
 {
-    init_sessions_once();
-    int user_index = find_user_index_by_name(username);
+    init_auth_once();
 
-    pthread_mutex_lock(&users_mutex);
+    // încărcăm hash-ul userului
+    const char *sql =
+        "SELECT id, password_hash FROM users WHERE name = ? LIMIT 1;";
 
-    if (user_index < 0)
-    {
-        pthread_mutex_unlock(&users_mutex);
+    sqlite3_stmt *stmt;
+    int user_id = -1;
+    char stored_hash[128];
+
+    pthread_mutex_lock(&db_mutex);
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+
+    int rc = sqlite3_step(stmt);
+
+    if (rc == SQLITE_ROW) {
+        user_id = sqlite3_column_int(stmt, 0);
+        const char *h = (const char*)sqlite3_column_text(stmt, 1);
+        strncpy(stored_hash, h, sizeof(stored_hash));
+        stored_hash[sizeof(stored_hash)-1] = '\0';
+    } else {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
         return AUTH_ERR_USER_NOT_FOUND;
     }
 
-    int user_id = g_users[user_index].id;
-    pthread_mutex_unlock(&users_mutex);
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
 
-    pthread_mutex_lock(&sessions_mutex);
-
-    int idx = sessions_find_index_by_fd(client_fd);
-    if (idx < 0)
-    {
-        idx = sessions_find_free_slot();
-        if (idx < 0)
-        {
-            pthread_mutex_unlock(&sessions_mutex);
-            return AUTH_ERR_NO_SLOT;
-        }
+    // verificare constant-time: crypto_pwhash_str_verify()
+    if (crypto_pwhash_str_verify(stored_hash, password, strlen(password)) != 0) {
+        return AUTH_ERR_WRONG_PASS;
     }
 
-    g_sessions[idx].client_fd = client_fd;
-    g_sessions[idx].user_id = user_id;
+    // creăm/actualizăm sesiunea
+    const char *sql2 =
+        "INSERT INTO sessions(client_fd, user_id) "
+        "VALUES (?, ?) "
+        "ON CONFLICT(client_fd) DO UPDATE SET user_id = excluded.user_id;";
 
-    pthread_mutex_unlock(&sessions_mutex);
+    pthread_mutex_lock(&db_mutex);
 
-    return AUTH_OK;
+    if (sqlite3_prepare_v2(g_db, sql2, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
+    }
+
+    sqlite3_bind_int(stmt, 1, client_fd);
+    sqlite3_bind_int(stmt, 2, user_id);
+
+    rc = sqlite3_step(stmt);
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return (rc == SQLITE_DONE) ? AUTH_OK : AUTH_ERR_UNKNOWN;
 }
 
+/*
+ * ============================
+ * LOGOUT
+ * ============================
+ */
 int auth_logout(int client_fd)
 {
-    init_sessions_once();
+    init_auth_once();
 
-    pthread_mutex_lock(&sessions_mutex);
+    const char *sql = "DELETE FROM sessions WHERE client_fd = ?;";
+    sqlite3_stmt *stmt;
+    int rc;
 
-    int idx = sessions_find_index_by_fd(client_fd);
-    if (idx >= 0)
-    {
-        g_sessions[idx].client_fd = -1;
-        g_sessions[idx].user_id   = -1;
+    pthread_mutex_lock(&db_mutex);
+
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
     }
-    else
-        return AUTH_ERR_EXISTS;
 
-    pthread_mutex_unlock(&sessions_mutex);
-    return AUTH_OK;
+    sqlite3_bind_int(stmt, 1, client_fd);
+    rc = sqlite3_step(stmt);
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return (rc == SQLITE_DONE) ? AUTH_OK : AUTH_ERR_UNKNOWN;
 }
 
+/*
+ * ============================
+ * auth_get_user_id(client_fd)
+ * ============================
+ */
 int auth_get_user_id(int client_fd)
 {
-    init_sessions_once();
+    init_auth_once();
 
+    const char *sql =
+        "SELECT user_id FROM sessions WHERE client_fd = ? LIMIT 1;";
+
+    sqlite3_stmt *stmt;
     int user_id = -1;
 
-    pthread_mutex_lock(&sessions_mutex);
+    pthread_mutex_lock(&db_mutex);
 
-    int idx = sessions_find_index_by_fd(client_fd);
-    if (idx >= 0)
-        user_id = g_sessions[idx].user_id;
+    if (sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
 
-    pthread_mutex_unlock(&sessions_mutex);
+    sqlite3_bind_int(stmt, 1, client_fd);
 
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW)
+        user_id = sqlite3_column_int(stmt, 0);
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
     return user_id;
 }
 
+/*
+ * ============================
+ * auth_get_user_id_by_name()
+ * ============================
+ */
 int auth_get_user_id_by_name(const char *username)
 {
-    int idx = -1;
-
-    pthread_mutex_lock(&users_mutex);
-    idx = find_user_index_by_name(username);
-    int user_id = -1;
-    if (idx >= 0)
-        user_id = g_users[idx].id;
-    pthread_mutex_unlock(&users_mutex);
-
-    return user_id;
+    init_auth_once();
+    return db_find_user_id_by_name(username);
 }
