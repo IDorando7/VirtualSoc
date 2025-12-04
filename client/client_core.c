@@ -1,9 +1,8 @@
 #include "client.h"
 #include "common.h"
-#include "models.h"
-#include "protocol.h"
 #include "utils_client.h"
 #include "protocol_client.h"
+#include "protocol.h"
 
 int client_connect(const char* host, int port)
 {
@@ -12,7 +11,7 @@ int client_connect(const char* host, int port)
     if ((sd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror ("Error at socket creation.\n");
-        return errno;
+        return -1;
     }
 
     server.sin_family = AF_INET;
@@ -22,7 +21,7 @@ int client_connect(const char* host, int port)
     if (connect(sd, (struct sockaddr *) &server,sizeof (struct sockaddr)) == -1)
     {
         perror ("[client]Eroare la connect().\n");
-        return errno;
+        return -1;
     }
 
     return sd;
@@ -33,7 +32,7 @@ void client_loop(int sockfd)
     printf("Welcome to VirtualSoc!\n");
     printf("Type 'help' for commands.\n");
 
-    char buffer[256];
+    char buffer[MAX_CMD_LEN];
     while (1)
     {
         printf("VirtualSoc> ");
@@ -110,7 +109,7 @@ void client_loop(int sockfd)
         if (strcmp(cmd, "post") == 0)
         {
             char vis_str[32];
-            char content[4096];
+            char content[MAX_CONTENT_LEN];
 
             printf("Visibility (public/friends/close): ");
             int n = read_and_normalize(vis_str, sizeof(vis_str));
@@ -155,7 +154,7 @@ void client_loop(int sockfd)
                 continue;
             }
 
-            char msg[4096];
+            char msg[MAX_CONTENT_LEN];
             printf("Message for %s: ", arg1);
             int n = read_and_normalize(msg, sizeof(msg));
             if (n < 0)

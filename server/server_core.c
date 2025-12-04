@@ -77,7 +77,7 @@ static void *client_handler(void * arg)
     fflush (stdout);
     pthread_detach(pthread_self());
     command_dispatch(arg);
-    close ((intptr_t)arg);
+    close (tdL.client);
     return NULL;
 
 }

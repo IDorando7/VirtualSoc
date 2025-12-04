@@ -12,11 +12,13 @@ SERVER_SRC = \
     server/server_core.c \
     server/command_dispatch.c \
     server/auth.c \
+    server/models.c \
     server/posts.c \
     server/friends.c \
     server/messages.c \
     server/storage.c \
     server/utils_server.c \
+    client/utils_client.c\
     $(COMMON_SRC)
 
 CLIENT_SRC = \
@@ -34,6 +36,8 @@ CLIENT_SRC = \
 SERVER_BIN = server_app
 CLIENT_BIN = client_app
 
+LDFLAGS_SERVER = -lsqlite3 -lsodium -lpthread
+
 # ------------------------------
 # BUILD RULES
 # ------------------------------
@@ -41,7 +45,7 @@ CLIENT_BIN = client_app
 all: $(SERVER_BIN) $(CLIENT_BIN)
 
 $(SERVER_BIN): $(SERVER_SRC)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS_SERVER)
 
 $(CLIENT_BIN): $(CLIENT_SRC)
 	$(CC) $(CFLAGS) -o $@ $^
