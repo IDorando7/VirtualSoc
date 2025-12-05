@@ -102,6 +102,11 @@ void client_loop(int sockfd)
         // logout
         if (strcmp(cmd, "logout") == 0)
         {
+            if (arg1[0] != '\0' || arg2[0] != '\0')
+            {
+                printf("Usage: logout\n");
+                continue;
+            }
             cmd_logout(sockfd);
             continue;
         }
@@ -109,6 +114,12 @@ void client_loop(int sockfd)
         // post
         if (strcmp(cmd, "post") == 0)
         {
+            if (arg1[0] != '\0' || arg2[0] != '\0')
+            {
+                printf("Usage: post\n");
+                continue;
+            }
+
             char vis_str[32];
             char content[MAX_CONTENT_LEN];
 
@@ -117,6 +128,13 @@ void client_loop(int sockfd)
             if (n < 0)
             {
                 printf("Error at read");
+                break;
+            }
+
+            if (strcmp(vis_str, "public") != 0 && strcmp(vis_str, "friends") != 0
+                && strcmp(vis_str, "close") != 0)
+            {
+                printf("Invalid visibility argument");
                 break;
             }
 
@@ -135,6 +153,11 @@ void client_loop(int sockfd)
         // view_public
         if (strcmp(cmd, "view_public") == 0)
         {
+            if (arg1[0] != '\0' || arg2[0] != '\0')
+            {
+                printf("Usage: view_public\n");
+                continue;
+            }
             cmd_view_public(sockfd);
             continue;
         }
@@ -142,6 +165,11 @@ void client_loop(int sockfd)
         // view_feed
         if (strcmp(cmd, "view_feed") == 0)
         {
+            if (arg1[0] != '\0' || arg2[0] != '\0')
+            {
+                printf("Usage: view_public\n");
+                continue;
+            }
             cmd_view_feed(sockfd);
             continue;
         }

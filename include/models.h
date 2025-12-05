@@ -23,6 +23,7 @@ struct Post
 {
     int id;
     int author_id;
+    char author_name[64];
     enum post_visibility vis;
     char content[1024];
 };
