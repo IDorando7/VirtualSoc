@@ -8,3 +8,5 @@ void cmd_view_public(int sockfd);
 void cmd_view_feed(int sockfd);
 void cmd_send_message(int sockfd, char *arg1, char msg[]);
 void cmd_list_messages(int sockfd, char *arg1);
+void cmd_add_friend(int sockfd, char *arg1);
+void cmd_list_friends(int sockfd);

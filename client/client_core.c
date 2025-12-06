@@ -66,6 +66,8 @@ void client_loop(int sockfd)
             printf("  view_feed\n");
             printf("  send <user>\n");
             printf("  messages <user>\n");
+            printf("  add <user>\n");
+            printf("  friends\n");
             printf("  exit\n");
             continue;
         }
@@ -205,6 +207,28 @@ void client_loop(int sockfd)
                 continue;
             }
             cmd_list_messages(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "add") == 0)
+        {
+            if (arg1[0] == '\0')
+            {
+                printf("Usage: add <username>\n");
+                continue;
+            }
+            cmd_add_friend(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "friends") == 0)
+        {
+            if (arg1[0] != '\0')
+            {
+                printf("Usage: friends\n");
+                continue;
+            }
+            cmd_list_friends(sockfd);
             continue;
         }
 

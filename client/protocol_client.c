@@ -73,7 +73,7 @@ void cmd_view_public(int sockfd)
     if (n < 0) return;
     response[n] = '\0';
 
-    printf("Server: %s", response);
+    printf("%s", response);
 }
 
 void cmd_view_feed(int sockfd)
@@ -86,7 +86,7 @@ void cmd_view_feed(int sockfd)
     if (n < 0) return;
     response[n] = '\0';
 
-    printf("Server: %s", response);
+    printf("%s", response);
 }
 
 void cmd_send_message(int sockfd, char* arg1, char msg[])
@@ -102,7 +102,7 @@ void cmd_send_message(int sockfd, char* arg1, char msg[])
     if (n < 0) return;
     response[n] = '\0';
 
-    printf("Server: %s", response);
+    printf("%s", response);
 }
 
 void cmd_list_messages(int sockfd, char * arg1)
@@ -118,5 +118,34 @@ void cmd_list_messages(int sockfd, char * arg1)
     if (n < 0) return;
     response[n] = '\0';
 
+    printf("%s", response);
+}
+
+void cmd_add_friend(int sockfd, char* arg1)
+{
+    char buffer[MAX_CMD_LEN];
+    char response[MAX_CMD_LEN];
+
+    sprintf(buffer, "%s %s\n", CMD_ADD_FRIEND, arg1);
+
+    write(sockfd, buffer, sizeof(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
     printf("Server: %s", response);
+}
+
+void cmd_list_friends(int sockfd)
+{
+    char response[MAX_CMD_LEN];
+
+    write(sockfd, CMD_LIST_FRIENDS, sizeof(CMD_LIST_FRIENDS));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("%s", response);
 }

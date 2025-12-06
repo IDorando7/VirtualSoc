@@ -5,6 +5,7 @@
 #define MAX_ID_THREADS 10000
 #define MAX_USERS 10000
 #define MAX_SESSIONS 10000
+#define MAX_SESSIONS 10000
 
 enum user_type {USER_NORMAL, USER_ADMIN};
 enum user_vis {USER_PUBLIC, USER_PRIVATE}; // private, only friends can see posts

@@ -5,6 +5,7 @@
 
 #include "friends.h"
 #include "storage.h"   // pentru g_db și db_mutex
+#include "auth.h"
 
 /*
  * Schema tabelă friends (folosită aici):
@@ -249,4 +250,51 @@ int friends_are_close(int user_id, int friend_id)
     pthread_mutex_unlock(&db_mutex);
 
     return result;
+}
+
+static const char *friend_type_to_string(enum friend_type t)
+{
+    switch (t) {
+        case FRIEND_CLOSE:  return "Close";
+        case FRIEND_NORMAL: return "Normal";
+        default:            return "Unknown";
+    }
+}
+
+void format_friends_for_client(char *buf, size_t buf_size,
+                               struct Friendship *friends, int count,
+                               int current_user_id)
+{
+    if (buf_size == 0) return;
+
+    buf[0] = '\0';
+    int offset = 0;
+
+    offset += snprintf(buf + offset, buf_size - offset,
+                       "\033[32mOK\033[0m\nFRIENDS %d\n\n", count);
+
+    for (int i = 0; i < count && offset < (int)buf_size - 1; i++)
+    {
+        struct Friendship *fr = &friends[i];
+
+        // Determinăm care este "celălalt" user
+        int other_id =
+            (fr->user_id_1 == current_user_id ? fr->user_id_2 : fr->user_id_1);
+
+        char other_name[64];
+        auth_get_username_by_id(other_id, other_name, sizeof(other_name));
+
+        const char *type_str = friend_type_to_string(fr->type);
+
+        offset += snprintf(buf + offset, buf_size - offset,
+            "\033[90m========== Friend #%d ==========\033[0m\n"
+            "\033[35mUsername:\033[0m %s\n"
+            "\033[35mUser ID:\033[0m %d\n"
+            "\033[35mType:\033[0m \033[33m%s\033[0m\n\n",
+            i + 1,
+            other_name,
+            other_id,
+            type_str
+        );
+    }
 }

@@ -2,6 +2,7 @@
 
 #include "auth.h"
 #include "common.h"
+#include "friends.h"
 #include "messages.h"
 #include "posts.h"
 #include "utils_client.h"
@@ -116,8 +117,10 @@ void command_dispatch(void * arg)
         }
         int count = posts_get_feed_for_user(user_id, out_array, MAX_POSTS);
         if (count < 0)
+        {
             build_error(response, ERR_INTERNAL, "Public feed failed");
-        else build_ok(response, "Public feeds successful");
+            return;
+        }
 
         format_posts_for_client(response, sizeof(response), out_array, count);
         write(tdL.client, response, sizeof(response));
@@ -134,7 +137,13 @@ void command_dispatch(void * arg)
             return;
         }
         char sender_name[64];
-        auth_get_username_by_id(sender_id, sender_name, sizeof(sender_name));
+        int ok = auth_get_username_by_id(sender_id, sender_name, sizeof(sender_name));
+        if (ok < 0)
+        {
+            build_error(response, ERR_USER_NOT_FOUND, "Sender doesn't exist.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
 
         int target_id =  auth_get_user_id_by_name(arg1);
         if (target_id < 0)
@@ -199,6 +208,61 @@ void command_dispatch(void * arg)
 
         write(tdL.client, resp, sizeof(resp));
         return;
+    }
+
+    if (strcmp(cmd, CMD_ADD_FRIEND) == 0)
+    {
+        int target_id =  auth_get_user_id_by_name(arg1);
+        if (target_id < 0)
+        {
+            build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int me_id = auth_get_user_id(tdL.client);
+        if (me_id < 0)
+        {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int ok = friends_add(me_id, target_id, FRIEND_NORMAL);
+        if (ok < 0)
+        {
+            build_error(response, ERR_INTERNAL, "Internal error. Can't add friend.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        build_ok(response, "Add friend");
+        write(tdL.client, response, sizeof(response));
+        return;
+    }
+
+    if (strcmp(cmd, CMD_LIST_FRIENDS) == 0)
+    {
+        struct Friendship out_friends[MAX_FRIENDS_LIST];
+        int user_id = auth_get_user_id(tdL.client);
+        if (user_id < 0)
+        {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int count = friends_list_for_user(user_id, out_friends, MAX_FRIENDS_LIST);
+        if (count < 0)
+        {
+            build_error(response, ERR_INTERNAL, "Friends list failed");
+            return;
+        }
+
+        format_friends_for_client(response, sizeof(response), out_friends, count, user_id);
+        write(tdL.client, response, sizeof(response));
+        return;
+
     }
 
 }
