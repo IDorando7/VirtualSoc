@@ -196,6 +196,7 @@ void client_loop(int sockfd)
             continue;
         }
 
+        // message view
         if (strcmp(cmd, "messages") == 0)
         {
             if (arg1[0] == '\0')

@@ -2,10 +2,12 @@
 
 #include "auth.h"
 #include "common.h"
+#include "messages.h"
 #include "posts.h"
 #include "utils_client.h"
 #include "protocol.h"
 #include "server.h"
+#include "sessions.h"
 
 void command_dispatch(void * arg)
 {
@@ -124,6 +126,79 @@ void command_dispatch(void * arg)
 
     if (strcmp(cmd, CMD_SEND_MESSAGE) == 0)
     {
+        int sender_id = auth_get_user_id(tdL.client);
+        if (sender_id < 0)
+        {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+        char sender_name[64];
+        auth_get_username_by_id(sender_id, sender_name, sizeof(sender_name));
 
+        int target_id =  auth_get_user_id_by_name(arg1);
+        if (target_id < 0)
+        {
+            build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int conv_id = messages_find_or_create_dm(sender_id, target_id);
+        if (conv_id < 0)
+        {
+            build_error(response, ERR_INTERNAL, "Internal error (msg).");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int target_fd = sessions_find_fd_by_user_id(target_id);
+        if (target_fd >= 0)
+        {
+            char notify[MAX_CONTENT_LEN];
+            snprintf(notify, sizeof(notify), "NEW_MSG_FROM %s\nContent: %s\n",
+                sender_name, arg2);
+            write(target_fd, notify, sizeof(notify));
+        }
+
+        build_ok(response, "Message sent");
+        write(tdL.client, response, sizeof(response));
+        return;
     }
+
+    if (strcmp(cmd, CMD_LIST_MESSAGES) == 0)
+    {
+        int me_id = auth_get_user_id(tdL.client);
+        if (me_id < 0)
+        {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int target_id = auth_get_user_id_by_name(arg1);
+        if (target_id < 0)
+        {
+            build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        struct Message msgs[MAX_MESSAGE_LIST];
+        int count = messages_get_history_dm(me_id, target_id, msgs, MAX_MESSAGE_LIST);
+
+        if (count < 0)
+        {
+            build_error(response, ERR_INTERNAL, "Internal error (msg).");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        char resp[MAX_CONTENT_LEN * MAX_MESSAGE_LIST];
+        format_messages_for_client(resp, sizeof(resp), msgs, count, me_id);
+
+        write(tdL.client, resp, sizeof(resp));
+        return;
+    }
+
 }

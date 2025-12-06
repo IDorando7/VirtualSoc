@@ -18,6 +18,7 @@ int auth_logout(int client_fd);
 
 int auth_get_user_id(int client_fd);
 int auth_get_user_id_by_name(const char *username);
+int auth_get_username_by_id(int user_id, char *out, size_t out_size);
 
 int auth_set_profile_visibility(int user_id, int is_public);
 

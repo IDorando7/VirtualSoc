@@ -18,6 +18,7 @@ SERVER_SRC = \
     server/messages.c \
     server/storage.c \
     server/utils_server.c \
+    server/sessions.c \
     client/utils_client.c\
     $(COMMON_SRC)
 

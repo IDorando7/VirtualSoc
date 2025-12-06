@@ -1,6 +1,7 @@
 #include "server.h"
 #include "common.h"
 #include "storage.h"
+#include "sessions.h"
 #include <sodium.h>
 
 int main(void)
@@ -13,6 +14,8 @@ int main(void)
 
     if (storage_init("data/virtualsoc.db") < 0)
         return 1;
+
+    sessions_init();
 
     int sockfd = server_start(PORT);
     if (sockfd < 0)

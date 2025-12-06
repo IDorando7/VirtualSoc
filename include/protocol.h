@@ -7,6 +7,7 @@
 
 #define MAX_CMD_LEN 1024
 #define MAX_CONTENT_LEN 8192
+#define MAX_MESSAGE_LIST 512
 
 // Status responses
 #define RESP_OK     "OK"

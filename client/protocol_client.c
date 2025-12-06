@@ -107,5 +107,16 @@ void cmd_send_message(int sockfd, char* arg1, char msg[])
 
 void cmd_list_messages(int sockfd, char * arg1)
 {
+    char buffer[MAX_CMD_LEN];
+    char response[MAX_CMD_LEN];
 
+    sprintf(buffer, "%s %s\n", CMD_LIST_MESSAGES, arg1);
+
+    write(sockfd, buffer, sizeof(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
 }
