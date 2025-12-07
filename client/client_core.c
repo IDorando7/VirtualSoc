@@ -68,6 +68,7 @@ void client_loop(int sockfd)
             printf("  messages <user>\n");
             printf("  add <user>\n");
             printf("  friends\n");
+            printf("  change_vis <PUBLIC|PRIVATE>\n");
             printf("  exit\n");
             continue;
         }
@@ -230,6 +231,18 @@ void client_loop(int sockfd)
             }
             cmd_list_friends(sockfd);
             continue;
+        }
+
+        if (strcmp(cmd, "change_vis"))
+        {
+            if (arg1[0] != '\0' || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
+            {
+                printf("Usage: change_vis <PUBLIC|PRIVATE>\n");
+                continue;
+            }
+            cmd_change_vis(sockfd, arg1);
+            continue;
+
         }
 
         printf("Unknown command: %s\n", cmd);

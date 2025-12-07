@@ -149,3 +149,16 @@ void cmd_list_friends(int sockfd)
 
     printf("%s", response);
 }
+
+void cmd_change_vis(int sockfd, const char* arg1)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+
+    sprintf(buffer, "%s %s\n", CMD_SET_PROFILE_VIS, arg1);
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}

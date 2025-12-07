@@ -262,7 +262,34 @@ void command_dispatch(void * arg)
         format_friends_for_client(response, sizeof(response), out_friends, count, user_id);
         write(tdL.client, response, sizeof(response));
         return;
+    }
 
+    if (strcmp(cmd, CMD_SET_PROFILE_VIS) == 0)
+    {
+        enum user_vis vis;
+        if (arg1 == "PUBLIC")
+            vis = USER_PUBLIC;
+        else if (arg1 == "PRIVATE")
+            vis = USER_PRIVATE;
+
+        int user_id = auth_get_user_id(tdL.client);
+        if (user_id < 0) {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, strlen(response));
+            return;
+        }
+
+        int ok = auth_set_profile_visibility(user_id, vis);
+        if (ok < 0)
+        {
+            build_error(response, ERR_INTERNAL, "Could not update profile visibility.");
+            write(tdL.client, response, strlen(response));
+            return;
+        }
+
+        build_ok(response, "Profile visibility updated");
+        write(tdL.client, response, strlen(response));
+        return;
     }
 
 }

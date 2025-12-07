@@ -288,3 +288,41 @@ int auth_get_username_by_id(int user_id, char *out, size_t out_size)
     return 0;
 }
 
+int auth_set_profile_visibility(int user_id, enum user_vis vis)
+{
+    if (user_id < 0)
+        return -1;
+
+    const char *sql =
+        "UPDATE users SET vis = ? WHERE id = ?;";
+
+    sqlite3_stmt *stmt;
+    int rc;
+
+    pthread_mutex_lock(&db_mutex);
+
+    rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] prepare set vis failed: %s\n", sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, vis);
+    sqlite3_bind_int(stmt, 2, user_id);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[auth] set vis failed: %s\n", sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return AUTH_OK;
+}
+
+
