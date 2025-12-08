@@ -64,11 +64,17 @@ void client_loop(int sockfd)
             printf("  post\n");
             printf("  view_public\n");
             printf("  view_feed\n");
+            printf("  view_user <user>\n");
             printf("  send <user>\n");
             printf("  messages <user>\n");
             printf("  add <user>\n");
             printf("  friends\n");
             printf("  change_vis <PUBLIC|PRIVATE>\n");
+            printf("  change_friend <user> <NORMAL|CLOSE>\n");
+            printf("  make_admin <user>\n");
+            printf("  delete_user <user>\n");
+            printf("  delete_post <post>\n");
+            printf("  delete_friend <user>\n");
             printf("  exit\n");
             continue;
         }
@@ -233,7 +239,7 @@ void client_loop(int sockfd)
             continue;
         }
 
-        if (strcmp(cmd, "change_vis"))
+        if (strcmp(cmd, "change_vis") == 0)
         {
             if (arg1[0] != '\0' || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
             {
@@ -242,7 +248,72 @@ void client_loop(int sockfd)
             }
             cmd_change_vis(sockfd, arg1);
             continue;
+        }
 
+        if (strcmp(cmd, "make_admin") == 0)
+        {
+            if (arg1[0] == '\0')
+            {
+                printf("Usage: make_admin <user>\n");
+                continue;
+            }
+            cmd_make_admin(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "delete_user") == 0)
+        {
+            if (arg1[0] == '\0')
+            {
+                printf("Usage: delete_user <user>\n");
+                continue;
+            }
+            cmd_delete_user(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "delete_post") == 0)
+        {
+            if (arg1[0] == '\0')
+            {
+                printf("Usage: delete_user <post_id>\n");
+                continue;
+            }
+            cmd_delete_post(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "view_user") == 0)
+        {
+            if (arg1[0] == '\0')
+            {
+                printf("Usage: view_user <user>\n");
+                continue;
+            }
+            cmd_view_user(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "delete_friend") == 0)
+        {
+            if (arg1[0] == '\0')
+            {
+                printf("Usage: delete_friend <user>\n");
+                continue;
+            }
+            cmd_delete_friend(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "change_friend") == 0)
+        {
+            if (arg1[0] == '\0' || arg2[0] == '\0' || (strcmp(arg1, "NORMAL") != 0 && strcmp(arg1, "CLOSE") != 0))
+            {
+                printf("Usage: change_friend <user> <NORMAL|CLOSE>\n");
+                continue;
+            }
+            cmd_change_friend(sockfd, arg1, arg2);
+            continue;
         }
 
         printf("Unknown command: %s\n", cmd);

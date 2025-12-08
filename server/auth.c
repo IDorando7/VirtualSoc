@@ -51,7 +51,70 @@ static void init_auth_once(void)
     if (rc != SQLITE_OK) {
         fprintf(stderr, "[auth] Cannot create users table: %s\n", errmsg);
         sqlite3_free(errmsg);
-        // continuăm, dar orice operație ulterioară va pica cu AUTH_ERR_UNKNOWN
+        pthread_mutex_unlock(&db_mutex);
+        return;
+    }
+
+    /* >>> Check if there is any admin, if not create initial one <<< */
+    const char *sql_count_admin =
+        "SELECT COUNT(*) FROM users WHERE type = ?;";
+
+    sqlite3_stmt *stmt;
+    rc = sqlite3_prepare_v2(g_db, sql_count_admin, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] prepare count admin failed: %s\n", sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return;
+    }
+
+    sqlite3_bind_int(stmt, 1, USER_ADMIN);
+
+    int admin_count = 0;
+    if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        admin_count = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (admin_count == 0) {
+        /* create initial admin: username=admin, password=admin123 */
+        const char *initial_user = "admin";
+        const char *initial_pass = getenv("PAROLA_ADMIN");
+
+        char hash[crypto_pwhash_STRBYTES];
+        if (crypto_pwhash_str(
+                hash,
+                initial_pass,
+                strlen(initial_pass),
+                crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                crypto_pwhash_MEMLIMIT_INTERACTIVE
+            ) != 0)
+        {
+            fprintf(stderr, "[auth] crypto_pwhash_str for initial admin failed\n");
+        } else {
+            const char *sql_ins =
+                "INSERT INTO users(name, password_hash, type, vis) "
+                "VALUES (?, ?, ?, ?);";
+
+            rc = sqlite3_prepare_v2(g_db, sql_ins, -1, &stmt, NULL);
+            if (rc == SQLITE_OK) {
+                sqlite3_bind_text(stmt, 1, initial_user, -1, SQLITE_TRANSIENT);
+                sqlite3_bind_text(stmt, 2, hash, -1, SQLITE_TRANSIENT);
+                sqlite3_bind_int(stmt, 3, USER_ADMIN);
+                sqlite3_bind_int(stmt, 4, USER_PRIVATE); // admin poate fi privat
+
+                rc = sqlite3_step(stmt);
+                if (rc != SQLITE_DONE) {
+                    fprintf(stderr, "[auth] insert initial admin failed: %s\n", sqlite3_errmsg(g_db));
+                } else {
+                    fprintf(stderr,
+                            "[auth] Initial admin created: username='%s' password='%s' (CHANGE IT!)\n",
+                            initial_user, initial_pass);
+                }
+                sqlite3_finalize(stmt);
+            } else {
+                fprintf(stderr, "[auth] prepare insert initial admin failed: %s\n", sqlite3_errmsg(g_db));
+            }
+        }
     }
 
     pthread_mutex_unlock(&db_mutex);
@@ -324,5 +387,135 @@ int auth_set_profile_visibility(int user_id, enum user_vis vis)
 
     return AUTH_OK;
 }
+
+int auth_is_admin(int user_id)
+{
+    if (user_id <= 0) return -1;
+
+    const char *sql =
+        "SELECT type FROM users WHERE id = ? LIMIT 1;";
+
+    sqlite3_stmt *stmt;
+    int rc;
+    int is_admin = 0;
+
+    pthread_mutex_lock(&db_mutex);
+
+    rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] prepare is_admin failed: %s\n", sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, user_id);
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        int type = sqlite3_column_int(stmt, 0);
+        is_admin = (type == USER_ADMIN) ? 1 : 0;
+    } else if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[auth] is_admin select error: %s\n", sqlite3_errmsg(g_db));
+        is_admin = -1;
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return is_admin;
+}
+
+int auth_make_admin(int requester_id, const char *target_username)
+{
+    if (!target_username || target_username[0] == '\0')
+        return AUTH_ERR_UNKNOWN;
+
+    int is_admin = auth_is_admin(requester_id);
+    if (is_admin <= 0) {
+        // nu e admin
+        return AUTH_ERR_NOT_ADMIN;
+    }
+
+    const char *sql =
+        "UPDATE users SET type = ? WHERE name = ?;";
+
+    sqlite3_stmt *stmt;
+    int rc;
+
+    pthread_mutex_lock(&db_mutex);
+
+    rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] prepare make_admin failed: %s\n", sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
+    }
+
+    sqlite3_bind_int(stmt, 1, USER_ADMIN);
+    sqlite3_bind_text(stmt, 2, target_username, -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[auth] make_admin update failed: %s\n", sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
+    }
+
+    int changes = sqlite3_changes(g_db);
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    if (changes == 0)
+        return AUTH_ERR_USER_NOT_FOUND;
+
+    return AUTH_OK;
+}
+
+int auth_delete_user(int requester_id, const char *target_username)
+{
+    if (!target_username || target_username[0] == '\0')
+        return AUTH_ERR_UNKNOWN;
+
+    int is_admin = auth_is_admin(requester_id);
+    if (is_admin <= 0) {
+        return AUTH_ERR_NOT_ADMIN;
+    }
+
+    const char *sql =
+        "DELETE FROM users WHERE name = ?;";
+
+    sqlite3_stmt *stmt;
+    int rc;
+
+    pthread_mutex_lock(&db_mutex);
+
+    rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[auth] prepare delete_user failed: %s\n", sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
+    }
+
+    sqlite3_bind_text(stmt, 1, target_username, -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[auth] delete_user failed: %s\n", sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return AUTH_ERR_UNKNOWN;
+    }
+
+    int changes = sqlite3_changes(g_db);
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    if (changes == 0)
+        return AUTH_ERR_USER_NOT_FOUND;
+
+    return AUTH_OK;
+}
+
 
 

@@ -9,6 +9,7 @@
 #define MAX_CONTENT_LEN 8192
 #define MAX_MESSAGE_LIST 512
 #define MAX_FRIENDS_LIST 8192
+#define MAX_FEED        64000
 
 // Status responses
 #define RESP_OK     "OK"
@@ -26,14 +27,23 @@
 // Profile settings
 #define CMD_SET_PROFILE_VIS     "SET_PROFILE_VIS"  // SET_PROFILE_VIS PUBLIC|PRIVATE
 
+// Admin
+#define CMD_MAKE_ADMIN      "MAKE_ADMIN"
+#define CMD_DELETE_USER     "DELETE_USER"
+#define CMD_DELETE_POST     "DELETE_POST"
+
 // Friends
 #define CMD_ADD_FRIEND          "ADD_FRIEND"    // ADD_FRIEND username type
 #define CMD_LIST_FRIENDS        "LIST_FRIENDS"
+#define CMD_DELETE_FRIEND       "DELETE_FRIEND"
+#define CMD_SET_FRIEND_STATUS   "SET_FRIEND_STATUS"
 
 // Posts
 #define CMD_POST                "POST"          // POST VISIBILITY LENGTH\nCONTENT
 #define CMD_VIEW_PUBLIC_POSTS   "VIEW_PUBLIC_POSTS"
 #define CMD_VIEW_FEED           "VIEW_FEED"
+#define CMD_VIEW_USER_POSTS     "VIEW_USER_POSTS"
+
 
 // Messages
 #define CMD_SEND_MESSAGE        "SEND_MESSAGE"  // SEND_MESSAGE username LENGTH\nCONTENT
@@ -43,19 +53,22 @@
 #define CMD_CREATE_GROUP        "CREATE_GROUP"
 #define CMD_JOIN_GROUP          "JOIN_GROUP"
 #define CMD_SEND_GROUP_MSG      "SEND_GROUP_MSG"
+#define CMD_MEMBERS_GROUP       "MEMBERS_GROUP"
 
 // ------------
 // Error Codes
 // ------------
 
-#define ERR_UNKNOWN_CMD         "UNKNOWN_COMMAND"
-#define ERR_NOT_AUTH            "NOT_AUTHENTICATED"
-#define ERR_BAD_ARGS            "BAD_ARGUMENTS"
-#define ERR_USER_EXISTS         "USER_ALREADY_EXISTS"
-#define ERR_USER_NOT_FOUND      "USER_NOT_FOUND"
-#define ERR_WRONG_PASS          "WRONG_PASSWORD"
-#define ERR_NO_PERMISSION       "NO_PERMISSION"
-#define ERR_INTERNAL            "INTERNAL_ERROR"
+#define ERR_UNKNOWN_CMD             "UNKNOWN_COMMAND"
+#define ERR_NOT_AUTH                "NOT_AUTHENTICATED"
+#define ERR_BAD_ARGS                "BAD_ARGUMENTS"
+#define ERR_USER_EXISTS             "USER_ALREADY_EXISTS"
+#define ERR_USER_NOT_FOUND          "USER_NOT_FOUND"
+#define ERR_POST_NOT_FOUND          "POST_NOT_FOUND"
+#define ERR_WRONG_PASS              "WRONG_PASSWORD"
+#define ERR_NO_PERMISSION           "NO_PERMISSION"
+#define ERR_INTERNAL                "INTERNAL_ERROR"
+#define ERR_FRIENDSHIP_NOT_FOUND    "FRIENDSHIP_NOT_FOUND"
 
 // --------
 // Helpers

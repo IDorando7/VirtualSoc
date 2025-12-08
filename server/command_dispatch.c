@@ -100,8 +100,9 @@ void command_dispatch(void * arg)
             build_error(response, ERR_INTERNAL, "Public feed failed");
         else build_ok(response, "Public feeds successful");
 
-        format_posts_for_client(response, sizeof(response), out_array, count);
-        write(tdL.client, response, sizeof(response));
+        char resp[MAX_FEED];
+        format_posts_for_client(resp, sizeof(resp), out_array, count);
+        write(tdL.client, resp, sizeof(resp));
         return;
     }
 
@@ -122,8 +123,9 @@ void command_dispatch(void * arg)
             return;
         }
 
-        format_posts_for_client(response, sizeof(response), out_array, count);
-        write(tdL.client, response, sizeof(response));
+        char resp[MAX_FEED];
+        format_posts_for_client(resp, sizeof(resp), out_array, count);
+        write(tdL.client, resp, sizeof(resp));
         return;
     }
 
@@ -292,4 +294,169 @@ void command_dispatch(void * arg)
         return;
     }
 
+    if (strcmp(cmd, CMD_MAKE_ADMIN) == 0)
+    {
+        int requester_id = auth_get_user_id(tdL.client);
+        if (requester_id < 0) {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int ok = auth_make_admin(requester_id, arg1);
+        if (ok == AUTH_ERR_NOT_ADMIN) {
+            build_error(response, ERR_NO_PERMISSION, "You are not admin.");
+        } else if (ok == AUTH_ERR_USER_NOT_FOUND) {
+            build_error(response, ERR_USER_NOT_FOUND, "User not found.");
+        } else if (ok != AUTH_OK) {
+            build_error(response, ERR_INTERNAL, "Could not promote user.");
+        } else {
+            build_ok(response, "User promoted to admin.");
+        }
+
+        write(tdL.client, response, strlen(response));
+        return;
+    }
+
+    if (strcmp(cmd, CMD_DELETE_USER) == 0)
+    {
+        int requester_id = auth_get_user_id(tdL.client);
+        if (requester_id < 0) {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int ok = auth_delete_user(requester_id, arg1);
+        if (ok == AUTH_ERR_NOT_ADMIN) {
+            build_error(response, ERR_NO_PERMISSION, "You are not admin.");
+        } else if (ok == AUTH_ERR_USER_NOT_FOUND) {
+            build_error(response, ERR_USER_NOT_FOUND, "User not found.");
+        } else if (ok != AUTH_OK) {
+            build_error(response, ERR_INTERNAL, "Could not remove user.");
+        } else {
+            build_ok(response, "User deleted.");
+        }
+
+        write(tdL.client, response, strlen(response));
+        return;
+    }
+
+    if (strcmp(cmd, CMD_DELETE_POST) == 0)
+    {
+        int requester_id = auth_get_user_id(tdL.client);
+        if (requester_id < 0) {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, strlen(response));
+            return;
+        }
+
+        int post_id = atoi(arg1);
+        int ok = posts_delete(requester_id, post_id);
+
+        if (ok == 1) {
+            build_ok(response, "Post deleted.");
+        } else if (ok == 0) {
+            build_error(response, ERR_POST_NOT_FOUND, "Post not found.");
+        } else if (ok == -2) {
+            build_error(response, ERR_NO_PERMISSION,
+                        "You can only delete your own posts (unless you are admin).");
+        } else {
+            build_error(response, ERR_INTERNAL, "Could not delete post.");
+        }
+
+        write(tdL.client, response, sizeof(response));
+        return;
+    }
+
+    if (strcmp(cmd, CMD_VIEW_USER_POSTS) == 0)
+    {
+        const char *target_username = arg1;
+
+        // viewer_id poate fi -1 dacă nu e logat
+        int viewer_id = auth_get_user_id(tdL.client);
+
+        int target_id = auth_get_user_id_by_name(target_username);
+        if (target_id < 0) {
+            build_error(response, ERR_USER_NOT_FOUND, "User not found.");
+            write(tdL.client, response, strlen(response));
+            return;
+        }
+
+        struct Post posts[MAX_POSTS];
+        int count = posts_get_for_user(viewer_id, target_id, posts, MAX_POSTS);
+
+        if (count < 0) {
+            build_error(response, ERR_INTERNAL, "Could not load user posts.");
+            write(tdL.client, response, strlen(response));
+            return;
+        }
+
+        char resp[MAX_FEED];
+        format_posts_for_client(resp, sizeof(resp), posts, count);
+        write(tdL.client, resp, sizeof(resp));
+        return;
+    }
+
+    if (strcmp(cmd, CMD_DELETE_FRIEND) == 0)
+    {
+        int user_id = auth_get_user_id(tdL.client);
+        if (user_id < 0) {
+            build_error(response, ERR_NOT_AUTH,
+                        "You must login first.");
+            write(tdL.client, response, sizeof(response));
+            return;
+        }
+
+        int ok = friends_delete(user_id, arg1);
+        if (ok == 1) {
+            build_ok(response, "Friendship deleted.");
+        } else if (ok == 0) {
+            build_error(response, ERR_FRIENDSHIP_NOT_FOUND, "You are not friends.");
+        } else if (ok == -2) {
+            build_error(response, ERR_USER_NOT_FOUND, "User not found.");
+        } else {
+            build_error(response, ERR_INTERNAL,
+                        "Failed to delete friendship.");
+        }
+
+        write(tdL.client, response, sizeof(response));
+        return;
+    }
+
+    if (strcmp(cmd, CMD_SET_FRIEND_STATUS) == 0)
+    {
+        int me_id = auth_get_user_id(tdL.client);
+        if (me_id < 0) {
+            build_error(response, ERR_NOT_AUTH, "You must login first.");
+            write(tdL.client, response, strlen(response));
+            return;
+        }
+
+        int friend_id = auth_get_user_id_by_name(arg1);
+        if (friend_id <= 0) {
+            build_error(response, ERR_USER_NOT_FOUND, "User not found.");
+            write(tdL.client, response, strlen(response));
+            return;
+        }
+
+        enum friend_type new_type;
+        if (strcasecmp(arg2, "NORMAL") == 0)
+            new_type = FRIEND_NORMAL;
+        else if (strcasecmp(arg2, "CLOSE") == 0)
+            new_type = FRIEND_CLOSE;
+
+        int rc = friends_change_status(me_id, friend_id, new_type);
+        if (rc < 0) {
+            build_error(response, ERR_INTERNAL, "Could not change friend status.");
+        } else if (rc == 0) {
+            build_error(response, ERR_FRIENDSHIP_NOT_FOUND,
+                        "You are not friends in this direction yet. Use add <user> first.");
+        } else {
+            build_ok(response, "Friend status updated.");
+        }
+
+        write(tdL.client, response, sizeof(response));
+        return;
+    }
 }

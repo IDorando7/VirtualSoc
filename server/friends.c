@@ -88,50 +88,14 @@ int friends_add(int user_id, int friend_id, enum friend_type type)
     pthread_mutex_lock(&db_mutex);
 
     int rc1 = friends_upsert_one(user_id, friend_id, type);
-    int rc2 = friends_upsert_one(friend_id, user_id, type);
+    //int rc2 = friends_upsert_one(friend_id, user_id, type);
 
     pthread_mutex_unlock(&db_mutex);
 
-    if (rc1 < 0 || rc2 < 0) {
+    if (rc1 < 0) {
         return -1;
     }
 
-    return 0;
-}
-
-int friends_remove(int user_id, int friend_id)
-{
-    const char *sql =
-        "DELETE FROM friends "
-        "WHERE (user_id = ? AND friend_id = ?) "
-        "   OR (user_id = ? AND friend_id = ?);";
-
-    sqlite3_stmt *stmt = NULL;
-
-    pthread_mutex_lock(&db_mutex);
-
-    int rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "[friends] prepare delete failed: %s\n", sqlite3_errmsg(g_db));
-        pthread_mutex_unlock(&db_mutex);
-        return -1;
-    }
-
-    sqlite3_bind_int(stmt, 1, user_id);
-    sqlite3_bind_int(stmt, 2, friend_id);
-    sqlite3_bind_int(stmt, 3, friend_id);
-    sqlite3_bind_int(stmt, 4, user_id);
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
-        fprintf(stderr, "[friends] delete failed: %s\n", sqlite3_errmsg(g_db));
-        sqlite3_finalize(stmt);
-        pthread_mutex_unlock(&db_mutex);
-        return -1;
-    }
-
-    sqlite3_finalize(stmt);
-    pthread_mutex_unlock(&db_mutex);
     return 0;
 }
 
@@ -177,79 +141,6 @@ int friends_list_for_user(int user_id, struct Friendship *out_array, int max_siz
     pthread_mutex_unlock(&db_mutex);
 
     return count;
-}
-
-int friends_are_friends(int user_id, int friend_id)
-{
-    const char *sql =
-        "SELECT 1 FROM friends "
-        "WHERE user_id = ? AND friend_id = ? "
-        "LIMIT 1;";
-
-    sqlite3_stmt *stmt = NULL;
-    int result = 0;  // 0 = nu, 1 = da
-
-    pthread_mutex_lock(&db_mutex);
-
-    int rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "[friends] prepare are_friends failed: %s\n", sqlite3_errmsg(g_db));
-        pthread_mutex_unlock(&db_mutex);
-        return -1;
-    }
-
-    sqlite3_bind_int(stmt, 1, user_id);
-    sqlite3_bind_int(stmt, 2, friend_id);
-
-    rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) {
-        result = 1;
-    } else if (rc != SQLITE_DONE) {
-        fprintf(stderr, "[friends] are_friends error: %s\n", sqlite3_errmsg(g_db));
-        result = -1;
-    }
-
-    sqlite3_finalize(stmt);
-    pthread_mutex_unlock(&db_mutex);
-
-    return result;
-}
-
-int friends_are_close(int user_id, int friend_id)
-{
-    const char *sql =
-        "SELECT type FROM friends "
-        "WHERE user_id = ? AND friend_id = ? "
-        "LIMIT 1;";
-
-    sqlite3_stmt *stmt = NULL;
-    int result = 0;  // 0 = nu e close, 1 = e close
-
-    pthread_mutex_lock(&db_mutex);
-
-    int rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "[friends] prepare are_close failed: %s\n", sqlite3_errmsg(g_db));
-        pthread_mutex_unlock(&db_mutex);
-        return -1;
-    }
-
-    sqlite3_bind_int(stmt, 1, user_id);
-    sqlite3_bind_int(stmt, 2, friend_id);
-
-    rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) {
-        int type = sqlite3_column_int(stmt, 0);
-        result = (type == FRIEND_CLOSE) ? 1 : 0;
-    } else if (rc != SQLITE_DONE) {
-        fprintf(stderr, "[friends] are_close error: %s\n", sqlite3_errmsg(g_db));
-        result = -1;
-    }
-
-    sqlite3_finalize(stmt);
-    pthread_mutex_unlock(&db_mutex);
-
-    return result;
 }
 
 static const char *friend_type_to_string(enum friend_type t)
@@ -298,3 +189,106 @@ void format_friends_for_client(char *buf, size_t buf_size,
         );
     }
 }
+
+int friends_delete(int user_id_1, const char *friend_username)
+{
+    if (user_id_1 <= 0 || friend_username == NULL || friend_username[0] == '\0')
+        return -1;
+
+    /* 1. Obținem id-ul prietenului B */
+    int user_id_2 = auth_get_user_id_by_name(friend_username);
+    if (user_id_2 <= 0) {
+        return -2; // friend not found
+    }
+
+    /* 2. Construim SQL pentru a șterge ambele direcții */
+    const char *sql =
+        "DELETE FROM friends "
+        "WHERE (user_id = ? AND friend_id = ?) "
+        "   OR (user_id = ? AND friend_id = ?);";
+
+    sqlite3_stmt *stmt;
+    int rc;
+
+    pthread_mutex_lock(&db_mutex);
+
+    rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[friends] delete prepare failed: %s\n",
+                sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, user_id_1);
+    sqlite3_bind_int(stmt, 2, user_id_2);
+    sqlite3_bind_int(stmt, 3, user_id_2);
+    sqlite3_bind_int(stmt, 4, user_id_1);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[friends] delete step failed: %s\n",
+                sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    int changes = sqlite3_changes(g_db);
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    if (changes == 0)
+        return 0; // nu exista prietenia
+
+    return 1; // succes - șterse ambele direcții
+}
+
+int friends_change_status(int user_id, int friend_id, enum friend_type new_type)
+{
+    if (user_id == friend_id)
+        return 0;
+
+    const char *sql =
+        "UPDATE friends "
+        "SET type = ? "
+        "WHERE user_id = ? AND friend_id = ?;";
+
+    sqlite3_stmt *stmt;
+    pthread_mutex_lock(&db_mutex);
+
+    int ok = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
+    if (ok != SQLITE_OK) {
+        fprintf(stderr, "[friends] change_status prepare failed: %s\n",
+                sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, new_type);
+    sqlite3_bind_int(stmt, 2, user_id);
+    sqlite3_bind_int(stmt, 3, friend_id);
+
+    ok = sqlite3_step(stmt);
+    if (ok != SQLITE_DONE) {
+        fprintf(stderr, "[friends] change_status step failed: %s\n",
+                sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    int changes = sqlite3_changes(g_db);
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    if (changes == 0) {
+        // nu exista încă relația user_id -> friend_id
+        return 0;
+    }
+
+    return 1; // status schimbat
+}
+
