@@ -18,31 +18,31 @@
  * );
  */
 
-int friends_init(void)
-{
-    const char *sql =
-        "CREATE TABLE IF NOT EXISTS friends ("
-        "  user_id   INTEGER NOT NULL,"
-        "  friend_id INTEGER NOT NULL,"
-        "  type      INTEGER NOT NULL,"
-        "  PRIMARY KEY (user_id, friend_id)"
-        ");";
-
-    char *errmsg = NULL;
-
-    pthread_mutex_lock(&db_mutex);
-
-    int rc = sqlite3_exec(g_db, sql, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "[friends] Cannot create table: %s\n", errmsg);
-        sqlite3_free(errmsg);
-        pthread_mutex_unlock(&db_mutex);
-        return -1;
-    }
-
-    pthread_mutex_unlock(&db_mutex);
-    return 0;
-}
+// int friends_init(void)
+// {
+//     const char *sql =
+//         "CREATE TABLE IF NOT EXISTS friends ("
+//         "  user_id   INTEGER NOT NULL,"
+//         "  friend_id INTEGER NOT NULL,"
+//         "  type      INTEGER NOT NULL,"
+//         "  PRIMARY KEY (user_id, friend_id)"
+//         ");";
+//
+//     char *errmsg = NULL;
+//
+//     pthread_mutex_lock(&db_mutex);
+//
+//     int rc = sqlite3_exec(g_db, sql, NULL, NULL, &errmsg);
+//     if (rc != SQLITE_OK) {
+//         fprintf(stderr, "[friends] Cannot create table: %s\n", errmsg);
+//         sqlite3_free(errmsg);
+//         pthread_mutex_unlock(&db_mutex);
+//         return -1;
+//     }
+//
+//     pthread_mutex_unlock(&db_mutex);
+//     return 0;
+// }
 
 /*
  * Funcție internă: inserează/actualizează un singur sens (user_id -> friend_id).

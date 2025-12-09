@@ -99,6 +99,9 @@ int sessions_set(int client_fd, int user_id)
  */
 int sessions_clear(int client_fd)
 {
+
+    printf("ioed\n");
+    fflush(stdout);
     const char *sql =
         "DELETE FROM sessions WHERE client_fd = ?;";
 
@@ -114,6 +117,9 @@ int sessions_clear(int client_fd)
         return -1;
     }
 
+    printf("ioed`\n");
+    fflush(stdout);
+
     sqlite3_bind_int(stmt, 1, client_fd);
 
     rc = sqlite3_step(stmt);
@@ -126,6 +132,8 @@ int sessions_clear(int client_fd)
 
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&db_mutex);
+    printf("ioed2\n");
+    fflush(stdout);
     return 0;
 }
 

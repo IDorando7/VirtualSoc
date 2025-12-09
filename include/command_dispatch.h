@@ -1,3 +1,3 @@
 #pragma once
 
-void command_dispatch(void * arg);
+void command_dispatch(int client);

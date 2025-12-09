@@ -3,8 +3,14 @@
 #include "models.h"
 #include "command_dispatch.h"
 
-static void *client_handler(void *);
+void* client_handler(void *);
 void answer(void *);
+
+void* pula_mea()
+{
+    printf("Pula mea\n");
+    return NULL;
+}
 
 int server_start(int port)
 {
@@ -49,8 +55,8 @@ void server_run(int sd)
     while (1)
     {
         int client;
-        struct thData * td;
-        int length = sizeof(from);
+        struct thData* td = malloc(sizeof(struct thData));
+        unsigned int length = sizeof(from);
 
         printf ("[server]Waiting at port %d...\n",PORT);
         fflush (stdout);
@@ -61,7 +67,6 @@ void server_run(int sd)
             continue;
         }
 
-        td = (struct thData*)malloc(sizeof(struct thData));
         td -> id_thread = i++;
         td -> client = client;
 
@@ -69,15 +74,16 @@ void server_run(int sd)
     }
 }
 
-static void *client_handler(void * arg)
+
+
+void* client_handler(void * arg)
 {
-    struct thData tdL;
-    tdL = *(struct thData*)arg;
-    printf ("[thread]- %d - Waiting the message...\n", tdL.id_thread);
+    struct thData* args = (struct thData*)arg;
+    printf ("[thread]- %d - Waiting the message...\n", args->id_thread);
     fflush (stdout);
+    command_dispatch(args->client);
     pthread_detach(pthread_self());
-    command_dispatch(arg);
-    close (tdL.client);
+    close (args->client);
     return NULL;
 
 }

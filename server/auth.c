@@ -78,7 +78,7 @@ static void init_auth_once(void)
     if (admin_count == 0) {
         /* create initial admin: username=admin, password=admin123 */
         const char *initial_user = "admin";
-        const char *initial_pass = getenv("PAROLA_ADMIN");
+        const char *initial_pass = "admin";
 
         char hash[crypto_pwhash_STRBYTES];
         if (crypto_pwhash_str(
@@ -282,12 +282,15 @@ int auth_login(int client_fd, const char *username, const char *password)
 
 int auth_logout(int client_fd)
 {
-    init_auth_once();
-
+    printf("Auidadfa\n");
+    fflush(stdout);
     if (sessions_clear(client_fd) != 0) {
         // poți alege să întorci OK chiar dacă nu exista sesiunea
         return AUTH_ERR_UNKNOWN;
     }
+
+    printf("Auidadfa\n");
+    fflush(stdout);
 
     return AUTH_OK;
 }

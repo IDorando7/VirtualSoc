@@ -112,6 +112,21 @@ int storage_init(const char *path)
         return -1;
     }
 
+    const char *sql_friends =
+        "CREATE TABLE IF NOT EXISTS friends ("
+        "  user_id   INTEGER NOT NULL,"
+        "  friend_id INTEGER NOT NULL,"
+        "  type      INTEGER NOT NULL,"
+        "  PRIMARY KEY (user_id, friend_id)"
+        ");";
+
+    rc = sqlite3_exec(g_db, sql_friends, NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[storage] Cannot create friends: %s\n", errmsg);
+        sqlite3_free(errmsg);
+        return -1;
+    }
+
     /* ----------------------------------------------------
        TOTUL E OK
        ---------------------------------------------------- */

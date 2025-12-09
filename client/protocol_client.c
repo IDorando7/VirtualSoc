@@ -38,7 +38,11 @@ void cmd_logout(int sockfd)
 {
     char response[MAX_CMD_LEN];
 
+    printf("adsasaafafaf\n");
+
     write(sockfd, CMD_LOGOUT, sizeof(CMD_LOGOUT));
+
+    printf("fadsaasdas\n");
 
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
@@ -53,6 +57,8 @@ void cmd_post(int sockfd, char vis_str[], char content[])
     char response[MAX_CMD_LEN];
 
     sprintf(buffer, "%s %s %s\n", CMD_POST, vis_str, content);
+    printf("text: %s", buffer);
+    fflush(stdout);
 
     write(sockfd, buffer, sizeof(buffer));
 
@@ -156,6 +162,7 @@ void cmd_change_vis(int sockfd, const char* arg1)
     char buffer[MAX_CMD_LEN];
 
     sprintf(buffer, "%s %s\n", CMD_SET_PROFILE_VIS, arg1);
+    write(sockfd, buffer, sizeof(buffer));
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
     response[n] = '\0';
@@ -169,6 +176,7 @@ void cmd_make_admin(int sockfd, const char* arg1)
     char buffer[MAX_CMD_LEN];
 
     sprintf(buffer, "%s %s\n", CMD_MAKE_ADMIN, arg1);
+    write(sockfd, buffer, sizeof(buffer));
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
     response[n] = '\0';
@@ -182,6 +190,7 @@ void cmd_delete_user(int sockfd, const char* arg1)
     char buffer[MAX_CMD_LEN];
 
     sprintf(buffer, "%s %s\n", CMD_DELETE_USER, arg1);
+    write(sockfd, buffer, sizeof(buffer));
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
     response[n] = '\0';
@@ -195,6 +204,7 @@ void cmd_delete_post(int sockfd, const char* arg1)
     char buffer[MAX_CMD_LEN];
 
     sprintf(buffer, "%s %s\n", CMD_DELETE_POST, arg1);
+    write(sockfd, buffer, sizeof(buffer));
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
     response[n] = '\0';
@@ -208,6 +218,7 @@ void cmd_view_user(int sockfd, const char* arg1)
     char buffer[MAX_CMD_LEN];
 
     sprintf(buffer, "%s %s\n", CMD_VIEW_USER_POSTS, arg1);
+    write(sockfd, buffer, sizeof(buffer));
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
     response[n] = '\0';
@@ -221,6 +232,7 @@ void cmd_delete_friend(int sockfd, const char* arg1)
     char buffer[MAX_CMD_LEN];
 
     sprintf(buffer, "%s %s\n", CMD_DELETE_FRIEND, arg1);
+    write(sockfd, buffer, sizeof(buffer));
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
     response[n] = '\0';
@@ -232,8 +244,10 @@ void cmd_change_friend(int sockfd, const char* arg1, const char*arg2)
 {
     char response[MAX_CMD_LEN];
     char buffer[MAX_CMD_LEN];
-
     sprintf(buffer, "%s %s %s\n", CMD_SET_FRIEND_STATUS, arg1, arg2);
+
+    write(sockfd, buffer, sizeof(buffer));
+
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;
     response[n] = '\0';

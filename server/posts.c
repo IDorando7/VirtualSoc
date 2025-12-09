@@ -187,26 +187,20 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
         "FROM posts p "
         "JOIN users u ON u.id = p.author_id "
         "LEFT JOIN friends f1 "
-        "       ON f1.user_id  = ? "
+        "       ON f1.user_id = ? "                /* viewer -> author */
         "      AND f1.friend_id = p.author_id "
         "LEFT JOIN friends f2 "
-        "       ON f2.user_id  = p.author_id "
+        "       ON f2.user_id = p.author_id "      /* author -> viewer */
         "      AND f2.friend_id = ? "
         "WHERE "
-        /* propriile postări – întotdeauna vizibile */
-        "      p.author_id = ? "
-        /* postări VIS_PUBLIC:
-         *   - autor PUBLIC -> toată lumea
-         *   - autor PRIVATE -> doar dacă sunt prieteni mutuali
-         */
-        "   OR (p.visibility = ? AND "
-        "       (u.vis = ? OR (f1.user_id IS NOT NULL AND f2.user_id IS NOT NULL))) "
-        /* postări doar pentru prieteni mutuali */
-        "   OR (p.visibility = ? AND (f1.user_id IS NOT NULL AND f2.user_id IS NOT NULL)) "
-        /* postări doar pentru close friends mutuali */
-        "   OR (p.visibility = ? AND "
-        "       (f1.user_id IS NOT NULL AND f2.user_id IS NOT NULL "
-        "        AND f1.type = ? AND f2.type = ?)) "
+        "      p.author_id = ? "                   /* always see own posts */
+        "   OR (p.visibility = ? "                 /* PUBLIC posts: */
+        "       AND (u.vis = ? "                   /*  - author has public profile */
+        "            OR (f1.user_id IS NOT NULL AND f2.user_id IS NOT NULL))) " /*  - or mutual friends */
+        "   OR (p.visibility = ? "                 /* FRIENDS posts: mutual friends only */
+        "       AND (f1.user_id IS NOT NULL AND f2.user_id IS NOT NULL)) "
+        "   OR (p.visibility = ? "                 /* CLOSE_FRIENDS posts: author marked viewer as CLOSE */
+        "       AND (f2.user_id IS NOT NULL AND f2.type = ?)) "
         "ORDER BY p.created_at DESC "
         "LIMIT ?;";
 
@@ -224,25 +218,14 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
     }
 
     int idx = 1;
-
-    /* f1.user_id = viewer, f2.friend_id = viewer, p.author_id = viewer pentru propriile postări */
-    sqlite3_bind_int(stmt, idx++, user_id);   // f1.user_id
-    sqlite3_bind_int(stmt, idx++, user_id);   // f2.friend_id
-    sqlite3_bind_int(stmt, idx++, user_id);   // p.author_id
-
-    /* (p.visibility = VIS_PUBLIC AND (u.vis = USER_PUBLIC OR prieteni mutuali)) */
+    sqlite3_bind_int(stmt, idx++, user_id);   /* f1.user_id (viewer) */
+    sqlite3_bind_int(stmt, idx++, user_id);   /* f2.friend_id (viewer) */
+    sqlite3_bind_int(stmt, idx++, user_id);   /* own posts: p.author_id = viewer */
     sqlite3_bind_int(stmt, idx++, VIS_PUBLIC);
     sqlite3_bind_int(stmt, idx++, USER_PUBLIC);
-
-    /* p.visibility = VIS_FRIENDS AND prieteni mutuali */
     sqlite3_bind_int(stmt, idx++, VIS_FRIENDS);
-
-    /* p.visibility = VIS_CLOSE_FRIENDS AND close mutuali */
     sqlite3_bind_int(stmt, idx++, VIS_CLOSE_FRIENDS);
     sqlite3_bind_int(stmt, idx++, FRIEND_CLOSE);
-    sqlite3_bind_int(stmt, idx++, FRIEND_CLOSE);
-
-    /* LIMIT ? */
     sqlite3_bind_int(stmt, idx++, max_size);
 
     int count = 0;
@@ -250,28 +233,18 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size) {
         out_array[count].id        = sqlite3_column_int(stmt, 0);
         out_array[count].author_id = sqlite3_column_int(stmt, 1);
+        out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
 
-        const unsigned char *uname = sqlite3_column_text(stmt, 2);
-        if (uname) {
-            strncpy(out_array[count].author_name,
-                    (const char*)uname,
-                    sizeof(out_array[count].author_name) - 1);
-            out_array[count].author_name[sizeof(out_array[count].author_name) - 1] = '\0';
-        } else {
-            out_array[count].author_name[0] = '\0';
-        }
+        const char *uname = (const char *)sqlite3_column_text(stmt, 2);
+        const char *txt   = (const char *)sqlite3_column_text(stmt, 4);
 
-        out_array[count].vis = (enum post_visibility)sqlite3_column_int(stmt, 3);
+        strncpy(out_array[count].author_name, uname ? uname : "",
+                sizeof(out_array[count].author_name) - 1);
+        out_array[count].author_name[sizeof(out_array[count].author_name) - 1] = '\0';
 
-        const unsigned char *txt = sqlite3_column_text(stmt, 4);
-        if (txt) {
-            strncpy(out_array[count].content,
-                    (const char*)txt,
-                    sizeof(out_array[count].content) - 1);
-            out_array[count].content[sizeof(out_array[count].content) - 1] = '\0';
-        } else {
-            out_array[count].content[0] = '\0';
-        }
+        strncpy(out_array[count].content, txt ? txt : "",
+                sizeof(out_array[count].content) - 1);
+        out_array[count].content[sizeof(out_array[count].content) - 1] = '\0';
 
         count++;
     }
@@ -286,6 +259,7 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
 
     return count;
 }
+
 
 
 static const char* visibility_to_string(enum post_visibility v)
@@ -487,7 +461,7 @@ int posts_get_for_user(int viewer_id, int target_user_id,
         while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size) {
             out_array[count].id        = sqlite3_column_int(stmt, 0);
             out_array[count].author_id = sqlite3_column_int(stmt, 1);
-            out_array[count].vis       = sqlite3_column_int(stmt, 3);
+            out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
 
             const char *name = (const char *)sqlite3_column_text(stmt, 2);
             const char *txt  = (const char *)sqlite3_column_text(stmt, 4);
@@ -538,7 +512,7 @@ int posts_get_for_user(int viewer_id, int target_user_id,
         while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size) {
             out_array[count].id        = sqlite3_column_int(stmt, 0);
             out_array[count].author_id = sqlite3_column_int(stmt, 1);
-            out_array[count].vis       = sqlite3_column_int(stmt, 3);
+            out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
 
             const char *name = (const char *)sqlite3_column_text(stmt, 2);
             const char *txt  = (const char *)sqlite3_column_text(stmt, 4);
@@ -560,7 +534,8 @@ int posts_get_for_user(int viewer_id, int target_user_id,
     }
 
     /* 4. viewer logat, nu admin, nu self:
-     *    avem nevoie de prietenie MUTUALA si de CLOSE mutual
+     *    avem nevoie de prietenie MUTUALA;
+     *    pentru CLOSE conteaza daca TARGET l-a marcat pe VIEWER ca FRIEND_CLOSE
      */
 
     bool has_1 = false, has_2 = false;
@@ -611,9 +586,9 @@ int posts_get_for_user(int viewer_id, int target_user_id,
     sqlite3_finalize(stmt);
 
     bool are_friends = (has_1 && has_2);
-    bool are_close   = (are_friends &&
-                        t1 == FRIEND_CLOSE &&
-                        t2 == FRIEND_CLOSE);
+    /* close = mutual friends + target (author) l-a marcat pe viewer ca FRIEND_CLOSE */
+    bool is_close_from_target = (has_2 && t2 == FRIEND_CLOSE);
+    bool are_close            = (are_friends && is_close_from_target);
 
     /* daca profilul este privat si nu sunt prieteni mutuali -> nu vede nimic */
     if (target_vis == USER_PRIVATE && !are_friends) {
@@ -626,10 +601,10 @@ int posts_get_for_user(int viewer_id, int target_user_id,
     int allow_close   = 0;
 
     if (target_vis == USER_PUBLIC) {
-        /* profil public -> public vizibil chiar daca nu sunt prieteni */
+        /* profil public -> PUBLIC vizibil chiar daca nu sunt prieteni */
         allow_public = 1;
     } else {
-        /* profil privat -> public doar pentru prieteni */
+        /* profil privat -> PUBLIC doar pentru prieteni */
         allow_public = are_friends ? 1 : 0;
     }
 
@@ -646,9 +621,9 @@ int posts_get_for_user(int viewer_id, int target_user_id,
         "FROM posts p "
         "JOIN users u ON u.id = p.author_id "
         "WHERE p.author_id = ? AND ( "
-        "      (? AND p.visibility = ?) "
-        "   OR (? AND p.visibility = ?) "
-        "   OR (? AND p.visibility = ?) "
+        "      (? AND p.visibility = ?) "        /* allow_public  -> VIS_PUBLIC */
+        "   OR (? AND p.visibility = ?) "        /* allow_friend  -> VIS_FRIENDS */
+        "   OR (? AND p.visibility = ?) "        /* allow_close   -> VIS_CLOSE_FRIENDS */
         ") "
         "ORDER BY p.created_at DESC "
         "LIMIT ?;";
@@ -674,7 +649,7 @@ int posts_get_for_user(int viewer_id, int target_user_id,
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size) {
         out_array[count].id        = sqlite3_column_int(stmt, 0);
         out_array[count].author_id = sqlite3_column_int(stmt, 1);
-        out_array[count].vis       = sqlite3_column_int(stmt, 3);
+        out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
 
         const char *name = (const char *)sqlite3_column_text(stmt, 2);
         const char *txt  = (const char *)sqlite3_column_text(stmt, 4);

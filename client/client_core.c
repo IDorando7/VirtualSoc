@@ -23,7 +23,6 @@ int client_connect(const char* host, int port)
         perror ("[client]Eroare la connect().\n");
         return -1;
     }
-
     return sd;
 }
 
@@ -87,7 +86,7 @@ void client_loop(int sockfd)
         // register
         if (strcmp(cmd, "register") == 0)
         {
-            if (arg1[0] == '\0' || arg2[0] == '\0')
+            if (arg1 == NULL || arg2 == NULL)
             {
                 printf("Usage: register <user> <pass>\n");
                 continue;
@@ -99,7 +98,7 @@ void client_loop(int sockfd)
         // login
         if (strcmp(cmd, "login") == 0)
         {
-            if (arg1[0] == '\0' || arg2[0] == '\0')
+            if (arg1 == NULL || arg2 == NULL)
             {
                 printf("Usage: login <user> <pass>\n");
                 continue;
@@ -109,13 +108,17 @@ void client_loop(int sockfd)
         }
 
         // logout
-        if (strcmp(cmd, "logout") == 0)
+        if (strncmp(cmd, "logout", 6) == 0)
         {
-            if (arg1[0] != '\0' || arg2[0] != '\0')
+            printf("%s, %s\n", arg1, arg2);
+            if (arg1 != NULL || arg2 != NULL)
             {
                 printf("Usage: logout\n");
                 continue;
             }
+
+            printf("adadad\n");
+            fflush(stdout);
             cmd_logout(sockfd);
             continue;
         }
@@ -123,7 +126,7 @@ void client_loop(int sockfd)
         // post
         if (strcmp(cmd, "post") == 0)
         {
-            if (arg1[0] != '\0' || arg2[0] != '\0')
+            if (arg1 != NULL || arg2 != NULL)
             {
                 printf("Usage: post\n");
                 continue;
@@ -133,6 +136,7 @@ void client_loop(int sockfd)
             char content[MAX_CONTENT_LEN];
 
             printf("Visibility (public/friends/close): ");
+            fflush(stdout);
             int n = read_and_normalize(vis_str, sizeof(vis_str));
             if (n < 0)
             {
@@ -148,7 +152,10 @@ void client_loop(int sockfd)
             }
 
             printf("Content: ");
+            fflush(stdout);
             int m = read_and_normalize(content, sizeof(content));
+            printf("%s", content);
+            fflush(stdout);
             if (m < 0)
             {
                 printf("Error at read");
@@ -159,164 +166,164 @@ void client_loop(int sockfd)
             continue;
         }
 
-        // view_public
-        if (strcmp(cmd, "view_public") == 0)
+    // view_public
+    if (strcmp(cmd, "view_public") == 0)
+    {
+        if (arg1 != NULL || arg2 != NULL)
         {
-            if (arg1[0] != '\0' || arg2[0] != '\0')
-            {
-                printf("Usage: view_public\n");
-                continue;
-            }
-            cmd_view_public(sockfd);
+            printf("Usage: view_public\n");
+            continue;
+        }
+        cmd_view_public(sockfd);
+        continue;
+    }
+
+    // view_feed
+    if (strcmp(cmd, "view_feed") == 0)
+    {
+        if (arg1 != NULL || arg2 != NULL)
+        {
+            printf("Usage: view_feed\n");
+            continue;
+        }
+        cmd_view_feed(sockfd);
+        continue;
+    }
+
+    // send message
+    if (strcmp(cmd, "send") == 0)
+    {
+        if (arg1 == NULL)
+        {
+            printf("Usage: send <username>\n");
             continue;
         }
 
-        // view_feed
-        if (strcmp(cmd, "view_feed") == 0)
+        char msg[MAX_CONTENT_LEN];
+        printf("Message for %s: ", arg1);
+        int n = read_and_normalize(msg, sizeof(msg));
+        if (n < 0)
         {
-            if (arg1[0] != '\0' || arg2[0] != '\0')
-            {
-                printf("Usage: view_public\n");
-                continue;
-            }
-            cmd_view_feed(sockfd);
-            continue;
+            printf("Error at read");
+            break;
         }
 
-        // send message
-        if (strcmp(cmd, "send") == 0)
+        cmd_send_message(sockfd, arg1, msg);
+        continue;
+    }
+
+    // message view
+    if (strcmp(cmd, "messages") == 0)
+    {
+        if (arg1 == NULL)
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: send <username>\n");
-                continue;
-            }
-
-            char msg[MAX_CONTENT_LEN];
-            printf("Message for %s: ", arg1);
-            int n = read_and_normalize(msg, sizeof(msg));
-            if (n < 0)
-            {
-                printf("Error at read");
-                break;
-            }
-
-            cmd_send_message(sockfd, arg1, msg);
+            printf("Usage: messages <username>\n");
             continue;
         }
+        cmd_list_messages(sockfd, arg1);
+        continue;
+    }
 
-        // message view
-        if (strcmp(cmd, "messages") == 0)
+    if (strcmp(cmd, "add") == 0)
+    {
+        if (arg1 == NULL)
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: messages <username>\n");
-                continue;
-            }
-            cmd_list_messages(sockfd, arg1);
+            printf("Usage: add <username>\n");
             continue;
         }
+        cmd_add_friend(sockfd, arg1);
+        continue;
+    }
 
-        if (strcmp(cmd, "add") == 0)
+    if (strcmp(cmd, "friends") == 0)
+    {
+        if (arg1 != NULL)
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: add <username>\n");
-                continue;
-            }
-            cmd_add_friend(sockfd, arg1);
+            printf("Usage: friends\n");
             continue;
         }
+        cmd_list_friends(sockfd);
+        continue;
+    }
 
-        if (strcmp(cmd, "friends") == 0)
+    if (strcmp(cmd, "change_vis") == 0)
+    {
+        if (arg1 != NULL || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
         {
-            if (arg1[0] != '\0')
-            {
-                printf("Usage: friends\n");
-                continue;
-            }
-            cmd_list_friends(sockfd);
+            printf("Usage: change_vis <PUBLIC|PRIVATE>\n");
             continue;
         }
+        cmd_change_vis(sockfd, arg1);
+        continue;
+    }
 
-        if (strcmp(cmd, "change_vis") == 0)
+    if (strcmp(cmd, "make_admin") == 0)
+    {
+        if (arg1 == NULL)
         {
-            if (arg1[0] != '\0' || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
-            {
-                printf("Usage: change_vis <PUBLIC|PRIVATE>\n");
-                continue;
-            }
-            cmd_change_vis(sockfd, arg1);
+            printf("Usage: make_admin <user>\n");
             continue;
         }
+        cmd_make_admin(sockfd, arg1);
+        continue;
+    }
 
-        if (strcmp(cmd, "make_admin") == 0)
+    if (strcmp(cmd, "delete_user") == 0)
+    {
+        if (arg1 == NULL)
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: make_admin <user>\n");
-                continue;
-            }
-            cmd_make_admin(sockfd, arg1);
+            printf("Usage: delete_user <user>\n");
             continue;
         }
+        cmd_delete_user(sockfd, arg1);
+        continue;
+    }
 
-        if (strcmp(cmd, "delete_user") == 0)
+    if (strcmp(cmd, "delete_post") == 0)
+    {
+        if (arg1 == NULL)
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: delete_user <user>\n");
-                continue;
-            }
-            cmd_delete_user(sockfd, arg1);
+            printf("Usage: delete_user <post_id>\n");
             continue;
         }
+        cmd_delete_post(sockfd, arg1);
+        continue;
+    }
 
-        if (strcmp(cmd, "delete_post") == 0)
+    if (strcmp(cmd, "view_user") == 0)
+    {
+        if (arg1 == NULL)
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: delete_user <post_id>\n");
-                continue;
-            }
-            cmd_delete_post(sockfd, arg1);
+            printf("Usage: view_user <user>\n");
             continue;
         }
+        cmd_view_user(sockfd, arg1);
+        continue;
+    }
 
-        if (strcmp(cmd, "view_user") == 0)
+    if (strcmp(cmd, "delete_friend") == 0)
+    {
+        if (arg1 == NULL)
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: view_user <user>\n");
-                continue;
-            }
-            cmd_view_user(sockfd, arg1);
+            printf("Usage: delete_friend <user>\n");
             continue;
         }
+        cmd_delete_friend(sockfd, arg1);
+        continue;
+    }
 
-        if (strcmp(cmd, "delete_friend") == 0)
+    if (strcmp(cmd, "change_friend") == 0)
+    {
+        if (arg1 == NULL || arg2 == NULL || (strcmp(arg2, "NORMAL") != 0 && strcmp(arg2, "CLOSE") != 0))
         {
-            if (arg1[0] == '\0')
-            {
-                printf("Usage: delete_friend <user>\n");
-                continue;
-            }
-            cmd_delete_friend(sockfd, arg1);
+            printf("Usage: change_friend <user> <NORMAL|CLOSE>\n");
             continue;
         }
+        cmd_change_friend(sockfd, arg1, arg2);
+        continue;
+    }
 
-        if (strcmp(cmd, "change_friend") == 0)
-        {
-            if (arg1[0] == '\0' || arg2[0] == '\0' || (strcmp(arg1, "NORMAL") != 0 && strcmp(arg1, "CLOSE") != 0))
-            {
-                printf("Usage: change_friend <user> <NORMAL|CLOSE>\n");
-                continue;
-            }
-            cmd_change_friend(sockfd, arg1, arg2);
-            continue;
-        }
-
-        printf("Unknown command: %s\n", cmd);
+    printf("Unknown command: %s\n", cmd);
     }
 
     close(sockfd);

@@ -1,11 +1,12 @@
 #ifndef MODELS_H
 #define MODELS_H
 
-#define MAX_POSTS 10000
-#define MAX_ID_THREADS 10000
-#define MAX_USERS 10000
-#define MAX_SESSIONS 10000
-#define MAX_SESSIONS 10000
+#define MAX_POSTS 100
+#define MAX_ID_THREADS 100
+#define MAX_USERS 100
+#define MAX_SESSIONS 100
+#define MAX_SESSIONS 100
+
 
 enum user_type {USER_NORMAL, USER_ADMIN};
 enum user_vis {USER_PUBLIC, USER_PRIVATE}; // private, only friends can see posts
@@ -42,7 +43,5 @@ struct Friendship
     enum friend_type type;
 };
 
-extern struct User g_users[MAX_USERS];
-extern int g_user_count;
 
 #endif
