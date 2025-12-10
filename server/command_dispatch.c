@@ -14,6 +14,7 @@ void command_dispatch(int client)
 {
     char buffer[MAX_CMD_LEN];
     char response[MAX_CONTENT_LEN];
+
     while (1)
     {
         int n = read(client, buffer, sizeof(buffer) - 1);
@@ -25,7 +26,7 @@ void command_dispatch(int client)
 
         buffer[n] = '\0';
 
-        printf ("[Thread]Message received...%s\n", buffer);
+        printf("[Thread]Message received...%s\n", buffer);
 
         char *cmd  = NULL;
         char *arg1 = NULL;
@@ -34,7 +35,7 @@ void command_dispatch(int client)
 
         printf("%s, %s, %s\n", cmd, arg1, arg2);
 
-        //register
+        /* ================= REGISTER ================= */
         if (strcmp(cmd, CMD_REGISTER) == 0)
         {
             printf("register\n");
@@ -44,14 +45,14 @@ void command_dispatch(int client)
             else if (ok == 1)
                 build_error(response, ERR_USER_EXISTS, "User already exists");
             else
-                build_error(response,ERR_INTERNAL, "Register failed");
+                build_error(response, ERR_INTERNAL, "Register failed");
 
             write(client, response, strlen(response));
             printf("Aici am ajuns in acest state\n");
             continue;
         }
 
-        // login
+        /* ================= LOGIN ================= */
         if (strcmp(cmd, CMD_LOGIN) == 0)
         {
             int ok = auth_login(client, arg1, arg2);
@@ -60,24 +61,26 @@ void command_dispatch(int client)
             else if (ok == 1)
                 build_error(response, ERR_USER_EXISTS, "User already exists");
             else
-                build_error(response,ERR_INTERNAL, "Login failed");
+                build_error(response, ERR_INTERNAL, "Login failed");
 
             write(client, response, strlen(response));
             continue;
         }
 
-        // logout
+        /* ================= LOGOUT ================= */
         if (strcmp(cmd, CMD_LOGOUT) == 0)
         {
             int ok = auth_logout(client);
             if (ok == 0)
                 build_ok(response, "Logout successful");
-            else build_error(response, ERR_NOT_AUTH, "Not auth");
+            else
+                build_error(response, ERR_NOT_AUTH, "Not auth");
 
             write(client, response, strlen(response));
             continue;
         }
 
+        /* ================= POST ================= */
         if (strcmp(cmd, CMD_POST) == 0)
         {
             printf("asedasdaadadadadaadadadadadadadadadadadaddadadadadadsa\n");
@@ -85,6 +88,7 @@ void command_dispatch(int client)
             int author_id = auth_get_user_id(client);
             printf("User id %d\n", author_id);
             fflush(stdout);
+
             int vis = 0;
             if (strcmp(arg1, "public") == 0)
                 vis = 0;
@@ -92,6 +96,7 @@ void command_dispatch(int client)
                 vis = 1;
             else if (strcmp(arg1, "close") == 0)
                 vis = 2;
+
             printf("vis: %d\n", vis);
             int ok = posts_add(author_id, vis, arg2);
 
@@ -99,26 +104,32 @@ void command_dispatch(int client)
 
             if (ok >= 0)
                 build_ok(response, "Posts successful");
-            else build_error(response, ERR_INTERNAL, "Posts failed");
+            else
+                build_error(response, ERR_INTERNAL, "Posts failed");
 
             write(client, response, strlen(response));
             continue;
         }
 
+        /* ================= VIEW_PUBLIC_POSTS ================= */
         if (strcmp(cmd, CMD_VIEW_PUBLIC_POSTS) == 0)
         {
             struct Post out_array[MAX_POSTS];
             int count = posts_get_public(out_array, MAX_POSTS);
             if (count < 0)
+            {
                 build_error(response, ERR_INTERNAL, "Public feed failed");
-            else build_ok(response, "Public feeds successful");
+                write(client, response, strlen(response));
+                continue;
+            }
 
             char resp[MAX_FEED];
-            format_posts_for_client(resp, strlen(resp), out_array, count);
+            format_posts_for_client(resp, sizeof(resp), out_array, count);
             write(client, resp, strlen(resp));
             continue;
         }
 
+        /* ================= VIEW_FEED ================= */
         if (strcmp(cmd, CMD_VIEW_FEED) == 0)
         {
             struct Post out_array[MAX_POSTS];
@@ -129,19 +140,22 @@ void command_dispatch(int client)
                 write(client, response, strlen(response));
                 continue;
             }
+
             int count = posts_get_feed_for_user(user_id, out_array, MAX_POSTS);
             if (count < 0)
             {
                 build_error(response, ERR_INTERNAL, "Public feed failed");
+                write(client, response, strlen(response));
                 continue;
             }
 
             char resp[MAX_FEED];
-            format_posts_for_client(resp, strlen(resp), out_array, count);
+            format_posts_for_client(resp, sizeof(resp), out_array, count);
             write(client, resp, strlen(resp));
             continue;
         }
 
+        /* ================= SEND_MESSAGE ================= */
         if (strcmp(cmd, CMD_SEND_MESSAGE) == 0)
         {
             int sender_id = auth_get_user_id(client);
@@ -151,8 +165,9 @@ void command_dispatch(int client)
                 write(client, response, strlen(response));
                 continue;
             }
+
             char sender_name[64];
-            int ok = auth_get_username_by_id(sender_id, sender_name, strlen(sender_name));
+            int ok = auth_get_username_by_id(sender_id, sender_name, sizeof(sender_name));
             if (ok < 0)
             {
                 build_error(response, ERR_USER_NOT_FOUND, "Sender doesn't exist.");
@@ -160,7 +175,7 @@ void command_dispatch(int client)
                 continue;
             }
 
-            int target_id =  auth_get_user_id_by_name(arg1);
+            int target_id = auth_get_user_id_by_name(arg1);
             if (target_id < 0)
             {
                 build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
@@ -184,21 +199,24 @@ void command_dispatch(int client)
                 continue;
             }
 
-            // int target_fd = sessions_find_fd_by_user_id(target_id);
-            // if (target_fd >= 0)
-            // {
-            //     char notify[MAX_CONTENT_LEN];
-            //     snprintf(notify, sizeof(notify),
-            //              "NOTIF:NEW_MSG_FROM %s\nContent: %s\n",
-            //              sender_name, arg2);
-            //     write(target_fd, notify, strlen(notify));
-            // }
+            /*
+            int target_fd = sessions_find_fd_by_user_id(target_id);
+            if (target_fd >= 0)
+            {
+                char notify[MAX_CONTENT_LEN];
+                snprintf(notify, sizeof(notify),
+                         "NOTIF:NEW_MSG_FROM %s\nContent: %s\n",
+                         sender_name, arg2);
+                write(target_fd, notify, strlen(notify));
+            }
+            */
 
             build_ok(response, "Message sent");
             write(client, response, strlen(response));
             continue;
         }
 
+        /* ================= LIST_MESSAGES ================= */
         if (strcmp(cmd, CMD_LIST_MESSAGES) == 0)
         {
             int me_id = auth_get_user_id(client);
@@ -228,17 +246,19 @@ void command_dispatch(int client)
             }
 
             char resp[8196];
-            format_messages_for_client(resp, strlen(resp), msgs, count, me_id);
+            format_messages_for_client(resp, sizeof(resp), msgs, count, me_id);
 
             write(client, resp, strlen(resp));
             continue;
         }
 
+        /* ================= ADD_FRIEND ================= */
         if (strcmp(cmd, CMD_ADD_FRIEND) == 0)
         {
             printf("%s", arg1);
             fflush(stdout);
-            int target_id =  auth_get_user_id_by_name(arg1);
+
+            int target_id = auth_get_user_id_by_name(arg1);
             if (target_id < 0)
             {
                 build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
@@ -267,6 +287,7 @@ void command_dispatch(int client)
             continue;
         }
 
+        /* ================= LIST_FRIENDS ================= */
         if (strcmp(cmd, CMD_LIST_FRIENDS) == 0)
         {
             struct Friendship out_friends[MAX_FRIENDS_LIST];
@@ -282,14 +303,16 @@ void command_dispatch(int client)
             if (count < 0)
             {
                 build_error(response, ERR_INTERNAL, "Friends list failed");
+                write(client, response, strlen(response));
                 continue;
             }
 
-            format_friends_for_client(response, strlen(response), out_friends, count, user_id);
+            format_friends_for_client(response, sizeof(response), out_friends, count, user_id);
             write(client, response, strlen(response));
             continue;
         }
 
+        /* ================= SET_PROFILE_VIS ================= */
         if (strcmp(cmd, CMD_SET_PROFILE_VIS) == 0)
         {
             enum user_vis vis;
@@ -297,6 +320,7 @@ void command_dispatch(int client)
                 vis = USER_PUBLIC;
             else if (strcmp(arg1, "PRIVATE") == 0)
                 vis = USER_PRIVATE;
+            /* altfel vis e nedefinit, dar clientul ar trebui să trimită doar valori valide */
 
             int user_id = auth_get_user_id(client);
             if (user_id < 0) {
@@ -318,6 +342,7 @@ void command_dispatch(int client)
             continue;
         }
 
+        /* ================= MAKE_ADMIN ================= */
         if (strcmp(cmd, CMD_MAKE_ADMIN) == 0)
         {
             int requester_id = auth_get_user_id(client);
@@ -342,6 +367,7 @@ void command_dispatch(int client)
             continue;
         }
 
+        /* ================= DELETE_USER ================= */
         if (strcmp(cmd, CMD_DELETE_USER) == 0)
         {
             int requester_id = auth_get_user_id(client);
@@ -366,6 +392,7 @@ void command_dispatch(int client)
             continue;
         }
 
+        /* ================= DELETE_POST ================= */
         if (strcmp(cmd, CMD_DELETE_POST) == 0)
         {
             int requester_id = auth_get_user_id(client);
@@ -393,6 +420,7 @@ void command_dispatch(int client)
             continue;
         }
 
+        /* ================= VIEW_USER_POSTS ================= */
         if (strcmp(cmd, CMD_VIEW_USER_POSTS) == 0)
         {
             const char *target_username = arg1;
@@ -417,11 +445,12 @@ void command_dispatch(int client)
             }
 
             char resp[MAX_FEED];
-            format_posts_for_client(resp, strlen(resp), posts, count);
+            format_posts_for_client(resp, sizeof(resp), posts, count);
             write(client, resp, strlen(resp));
             continue;
         }
 
+        /* ================= DELETE_FRIEND ================= */
         if (strcmp(cmd, CMD_DELETE_FRIEND) == 0)
         {
             int user_id = auth_get_user_id(client);
@@ -448,6 +477,7 @@ void command_dispatch(int client)
             continue;
         }
 
+        /* ================= SET_FRIEND_STATUS ================= */
         if (strcmp(cmd, CMD_SET_FRIEND_STATUS) == 0)
         {
             int me_id = auth_get_user_id(client);
