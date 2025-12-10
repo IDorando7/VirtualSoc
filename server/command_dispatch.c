@@ -16,11 +16,14 @@ void command_dispatch(int client)
     char response[MAX_CONTENT_LEN];
     while (1)
     {
-        if (read(client, buffer, sizeof(buffer)) <= 0)
+        int n = read(client, buffer, sizeof(buffer) - 1);
+        if (n <= 0)
         {
-            perror ("Error at read\n");
+            perror("[server] read");
             break;
         }
+
+        buffer[n] = '\0';
 
         printf ("[Thread]Message received...%s\n", buffer);
 
@@ -43,7 +46,7 @@ void command_dispatch(int client)
             else
                 build_error(response,ERR_INTERNAL, "Register failed");
 
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             printf("Aici am ajuns in acest state\n");
             continue;
         }
@@ -59,7 +62,7 @@ void command_dispatch(int client)
             else
                 build_error(response,ERR_INTERNAL, "Login failed");
 
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -71,7 +74,7 @@ void command_dispatch(int client)
                 build_ok(response, "Logout successful");
             else build_error(response, ERR_NOT_AUTH, "Not auth");
 
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -98,7 +101,7 @@ void command_dispatch(int client)
                 build_ok(response, "Posts successful");
             else build_error(response, ERR_INTERNAL, "Posts failed");
 
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -111,8 +114,8 @@ void command_dispatch(int client)
             else build_ok(response, "Public feeds successful");
 
             char resp[MAX_FEED];
-            format_posts_for_client(resp, sizeof(resp), out_array, count);
-            write(client, resp, sizeof(resp));
+            format_posts_for_client(resp, strlen(resp), out_array, count);
+            write(client, resp, strlen(resp));
             continue;
         }
 
@@ -123,7 +126,7 @@ void command_dispatch(int client)
             if (user_id < 0)
             {
                 build_error(response, ERR_NOT_AUTH, "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
             int count = posts_get_feed_for_user(user_id, out_array, MAX_POSTS);
@@ -134,8 +137,8 @@ void command_dispatch(int client)
             }
 
             char resp[MAX_FEED];
-            format_posts_for_client(resp, sizeof(resp), out_array, count);
-            write(client, resp, sizeof(resp));
+            format_posts_for_client(resp, strlen(resp), out_array, count);
+            write(client, resp, strlen(resp));
             continue;
         }
 
@@ -145,15 +148,15 @@ void command_dispatch(int client)
             if (sender_id < 0)
             {
                 build_error(response, ERR_NOT_AUTH, "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
             char sender_name[64];
-            int ok = auth_get_username_by_id(sender_id, sender_name, sizeof(sender_name));
+            int ok = auth_get_username_by_id(sender_id, sender_name, strlen(sender_name));
             if (ok < 0)
             {
                 build_error(response, ERR_USER_NOT_FOUND, "Sender doesn't exist.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -161,7 +164,7 @@ void command_dispatch(int client)
             if (target_id < 0)
             {
                 build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -169,7 +172,7 @@ void command_dispatch(int client)
             if (conv_id < 0)
             {
                 build_error(response, ERR_INTERNAL, "Internal error (msg).");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -177,22 +180,22 @@ void command_dispatch(int client)
             if (msg_id < 0)
             {
                 build_error(response, ERR_INTERNAL, "Internal error at (msg).");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
-            int target_fd = sessions_find_fd_by_user_id(target_id);
-            if (target_fd >= 0)
-            {
-                char notify[MAX_CONTENT_LEN];
-                snprintf(notify, sizeof(notify),
-                         "NOTIF:NEW_MSG_FROM %s\nContent: %s\n",
-                         sender_name, arg2);
-                write(target_fd, notify, strlen(notify));
-            }
+            // int target_fd = sessions_find_fd_by_user_id(target_id);
+            // if (target_fd >= 0)
+            // {
+            //     char notify[MAX_CONTENT_LEN];
+            //     snprintf(notify, sizeof(notify),
+            //              "NOTIF:NEW_MSG_FROM %s\nContent: %s\n",
+            //              sender_name, arg2);
+            //     write(target_fd, notify, strlen(notify));
+            // }
 
             build_ok(response, "Message sent");
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -202,7 +205,7 @@ void command_dispatch(int client)
             if (me_id < 0)
             {
                 build_error(response, ERR_NOT_AUTH, "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -210,7 +213,7 @@ void command_dispatch(int client)
             if (target_id < 0)
             {
                 build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -220,14 +223,14 @@ void command_dispatch(int client)
             if (count < 0)
             {
                 build_error(response, ERR_INTERNAL, "Internal error (msg).");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
             char resp[8196];
-            format_messages_for_client(resp, sizeof(resp), msgs, count, me_id);
+            format_messages_for_client(resp, strlen(resp), msgs, count, me_id);
 
-            write(client, resp, sizeof(resp));
+            write(client, resp, strlen(resp));
             continue;
         }
 
@@ -239,7 +242,7 @@ void command_dispatch(int client)
             if (target_id < 0)
             {
                 build_error(response, ERR_USER_NOT_FOUND, "User doesn't exist.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -247,7 +250,7 @@ void command_dispatch(int client)
             if (me_id < 0)
             {
                 build_error(response, ERR_NOT_AUTH, "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -255,12 +258,12 @@ void command_dispatch(int client)
             if (ok < 0)
             {
                 build_error(response, ERR_INTERNAL, "Internal error. Can't add friend.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
             build_ok(response, "Add friend");
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -271,7 +274,7 @@ void command_dispatch(int client)
             if (user_id < 0)
             {
                 build_error(response, ERR_NOT_AUTH, "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -282,8 +285,8 @@ void command_dispatch(int client)
                 continue;
             }
 
-            format_friends_for_client(response, sizeof(response), out_friends, count, user_id);
-            write(client, response, sizeof(response));
+            format_friends_for_client(response, strlen(response), out_friends, count, user_id);
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -320,7 +323,7 @@ void command_dispatch(int client)
             int requester_id = auth_get_user_id(client);
             if (requester_id < 0) {
                 build_error(response, ERR_NOT_AUTH, "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -344,7 +347,7 @@ void command_dispatch(int client)
             int requester_id = auth_get_user_id(client);
             if (requester_id < 0) {
                 build_error(response, ERR_NOT_AUTH, "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -386,7 +389,7 @@ void command_dispatch(int client)
                 build_error(response, ERR_INTERNAL, "Could not delete post.");
             }
 
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -414,8 +417,8 @@ void command_dispatch(int client)
             }
 
             char resp[MAX_FEED];
-            format_posts_for_client(resp, sizeof(resp), posts, count);
-            write(client, resp, sizeof(resp));
+            format_posts_for_client(resp, strlen(resp), posts, count);
+            write(client, resp, strlen(resp));
             continue;
         }
 
@@ -425,7 +428,7 @@ void command_dispatch(int client)
             if (user_id < 0) {
                 build_error(response, ERR_NOT_AUTH,
                             "You must login first.");
-                write(client, response, sizeof(response));
+                write(client, response, strlen(response));
                 continue;
             }
 
@@ -441,7 +444,7 @@ void command_dispatch(int client)
                             "Failed to delete friendship.");
             }
 
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
 
@@ -477,7 +480,7 @@ void command_dispatch(int client)
                 build_ok(response, "Friend status updated.");
             }
 
-            write(client, response, sizeof(response));
+            write(client, response, strlen(response));
             continue;
         }
     }
