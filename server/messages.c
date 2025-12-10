@@ -84,8 +84,8 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
 
     /* Dacă nu există, creăm conversația și membrii */
     const char *sql_insert_conv =
-        "INSERT INTO conversations(title, is_group, created_by, created_at) "
-        "VALUES (NULL, 0, ?, ?);";
+        "INSERT INTO conversations(title, is_group, visibility, created_by, created_at) "
+        "VALUES (?, 0, 2, ?, ?);";
 
     rc = sqlite3_prepare_v2(g_db, sql_insert_conv, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
@@ -94,8 +94,9 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
         return -1;
     }
 
-    sqlite3_bind_int(stmt, 1, user1_id);
-    sqlite3_bind_int(stmt, 2, (int)time(NULL));
+    sqlite3_bind_text(stmt, 1, "", -1, SQLITE_TRANSIENT); // title = ""
+    sqlite3_bind_int(stmt, 2, user1_id);
+    sqlite3_bind_int(stmt, 3, (int)time(NULL));
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
@@ -110,8 +111,8 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
 
     /* Inserăm membrii în conversation_members */
     const char *sql_insert_member =
-        "INSERT INTO conversation_members(conversation_id, user_id) "
-        "VALUES (?, ?);";
+        "INSERT INTO conversation_members(conversation_id, user_id, joined_at) "
+        "VALUES (?, ?, ?);";
 
     rc = sqlite3_prepare_v2(g_db, sql_insert_member, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
@@ -123,6 +124,7 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
     /* user1 */
     sqlite3_bind_int(stmt, 1, conv_id);
     sqlite3_bind_int(stmt, 2, user1_id);
+    sqlite3_bind_int(stmt, 3, (int)time(NULL));
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         fprintf(stderr, "[messages] insert member1 failed: %s\n", sqlite3_errmsg(g_db));
@@ -136,6 +138,7 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
     /* user2 */
     sqlite3_bind_int(stmt, 1, conv_id);
     sqlite3_bind_int(stmt, 2, user2_id);
+    sqlite3_bind_int(stmt, 3, (int)time(NULL));
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         fprintf(stderr, "[messages] insert member2 failed: %s\n", sqlite3_errmsg(g_db));
@@ -161,7 +164,6 @@ int messages_add(int conversation_id, int sender_id, const char *content)
 {
     if (conversation_id <= 0 || sender_id <= 0 || !content)
         return -1;
-
     const char *sql =
         "INSERT INTO messages(conversation_id, sender_id, content, created_at) "
         "VALUES (?, ?, ?, ?);";

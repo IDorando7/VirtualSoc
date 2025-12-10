@@ -12,14 +12,10 @@
 
 void command_dispatch(int client)
 {
-    printf("Bag pula in servereres\n");
-    fflush(stdout);
     char buffer[MAX_CMD_LEN];
     char response[MAX_CONTENT_LEN];
     while (1)
     {
-        printf("Bag pula in server\n");
-        fflush(stdout);
         if (read(client, buffer, sizeof(buffer)) <= 0)
         {
             perror ("Error at read\n");
@@ -177,13 +173,22 @@ void command_dispatch(int client)
                 continue;
             }
 
+            int msg_id = messages_add(conv_id, sender_id, arg2);
+            if (msg_id < 0)
+            {
+                build_error(response, ERR_INTERNAL, "Internal error at (msg).");
+                write(client, response, sizeof(response));
+                continue;
+            }
+
             int target_fd = sessions_find_fd_by_user_id(target_id);
             if (target_fd >= 0)
             {
                 char notify[MAX_CONTENT_LEN];
-                snprintf(notify, sizeof(notify), "NEW_MSG_FROM %s\nContent: %s\n",
-                    sender_name, arg2);
-                write(target_fd, notify, sizeof(notify));
+                snprintf(notify, sizeof(notify),
+                         "NOTIF:NEW_MSG_FROM %s\nContent: %s\n",
+                         sender_name, arg2);
+                write(target_fd, notify, strlen(notify));
             }
 
             build_ok(response, "Message sent");
@@ -219,7 +224,7 @@ void command_dispatch(int client)
                 continue;
             }
 
-            char resp[MAX_CONTENT_LEN * MAX_MESSAGE_LIST];
+            char resp[8196];
             format_messages_for_client(resp, sizeof(resp), msgs, count, me_id);
 
             write(client, resp, sizeof(resp));

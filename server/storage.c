@@ -44,7 +44,7 @@ int storage_init(const char *path)
         "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
         "  title       TEXT NOT NULL,"              /* nume grup sau "" pentru DM */
         "  is_group    INTEGER NOT NULL,"          /* 0 = DM, 1 = group */
-        "  visibility  INTEGER NOT NULL,"          /* doar pentru grupuri: 0=public,1=private */
+        "  visibility  INTEGER NOT NULL,"          /* doar pentru grupuri: 0=public,1=private, 2=dm */
         "  created_by  INTEGER NOT NULL,"
         "  created_at  INTEGER NOT NULL"
         ");";

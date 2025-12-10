@@ -201,6 +201,7 @@ void client_loop(int sockfd)
 
         char msg[MAX_CONTENT_LEN];
         printf("Message for %s: ", arg1);
+        fflush(stdout);
         int n = read_and_normalize(msg, sizeof(msg));
         if (n < 0)
         {
