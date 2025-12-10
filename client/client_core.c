@@ -249,7 +249,7 @@ void client_loop(int sockfd)
 
     if (strcmp(cmd, "change_vis") == 0)
     {
-        if (arg1 != NULL || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
+        if (arg1 == NULL || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
         {
             printf("Usage: change_vis <PUBLIC|PRIVATE>\n");
             continue;

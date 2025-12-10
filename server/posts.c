@@ -318,13 +318,13 @@ int posts_delete(int requester_id, int post_id)
     const char *sql_delete =
         "DELETE FROM posts WHERE id = ?;";
 
-    sqlite3_stmt *stmt;
+    sqlite3_stmt *stmt = NULL;
     int rc;
     int author_id = -1;
 
+    /* 1. Aflăm autorul postării (cu lock pe DB) */
     pthread_mutex_lock(&db_mutex);
 
-    /* 1. Aflăm autorul postării */
     rc = sqlite3_prepare_v2(g_db, sql_get_author, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         fprintf(stderr, "[posts] prepare get author failed: %s\n", sqlite3_errmsg(g_db));
@@ -350,21 +350,23 @@ int posts_delete(int requester_id, int post_id)
     }
 
     sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
 
-    /* 2. Verificăm permisiunea:
+    /* 2. Verificăm permisiunea ÎN AFARA lock-ului pe db_mutex:
      *    - dacă requester == author -> OK
      *    - altfel, dacă e admin -> OK
      *    - altfel -> FORBIDDEN
      */
     if (requester_id != author_id) {
-        int is_admin = auth_is_admin(requester_id);
+        int is_admin = auth_is_admin(requester_id);  // aceasta își ia singură db_mutex
         if (is_admin <= 0) {
-            pthread_mutex_unlock(&db_mutex);
             return -2; // nu are voie
         }
     }
 
-    /* 3. Ștergem postarea */
+    /* 3. Ștergem postarea (iar luăm mutex-ul) */
+    pthread_mutex_lock(&db_mutex);
+
     rc = sqlite3_prepare_v2(g_db, sql_delete, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
         fprintf(stderr, "[posts] prepare delete failed: %s\n", sqlite3_errmsg(g_db));
@@ -387,9 +389,10 @@ int posts_delete(int requester_id, int post_id)
     pthread_mutex_unlock(&db_mutex);
 
     if (changes == 0)
-        return 0;   // nimic șters (ar fi ciudat aici, dar pentru siguranță)
+        return 0;   // nimic șters (poate a șters altcineva între timp)
     return 1;       // șters cu succes
 }
+
 
 int posts_get_for_user(int viewer_id, int target_user_id,
                        struct Post *out_array, int max_size)

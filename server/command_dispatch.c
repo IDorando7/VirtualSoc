@@ -83,12 +83,7 @@ void command_dispatch(int client)
         /* ================= POST ================= */
         if (strcmp(cmd, CMD_POST) == 0)
         {
-            printf("asedasdaadadadadaadadadadadadadadadadadaddadadadadadsa\n");
-            fflush(stdout);
             int author_id = auth_get_user_id(client);
-            printf("User id %d\n", author_id);
-            fflush(stdout);
-
             int vis = 0;
             if (strcmp(arg1, "public") == 0)
                 vis = 0;
@@ -198,18 +193,6 @@ void command_dispatch(int client)
                 write(client, response, strlen(response));
                 continue;
             }
-
-            /*
-            int target_fd = sessions_find_fd_by_user_id(target_id);
-            if (target_fd >= 0)
-            {
-                char notify[MAX_CONTENT_LEN];
-                snprintf(notify, sizeof(notify),
-                         "NOTIF:NEW_MSG_FROM %s\nContent: %s\n",
-                         sender_name, arg2);
-                write(target_fd, notify, strlen(notify));
-            }
-            */
 
             build_ok(response, "Message sent");
             write(client, response, strlen(response));
