@@ -7,7 +7,9 @@
 #include "posts.h"
 #include "utils_client.h"
 #include "protocol.h"
+#include "groups.h"
 #include "server.h"
+
 #include "sessions.h"
 
 void command_dispatch(int client)
@@ -496,5 +498,327 @@ void command_dispatch(int client)
             write(client, response, strlen(response));
             continue;
         }
+
+        /* ================= CREATE_GROUP ================= */
+        if (strcmp(cmd, CMD_CREATE_GROUP) == 0)
+        {
+            if (!arg1 || !arg2) {
+                build_error(response, ERR_INTERNAL,
+                            "Usage: CREATE_GROUP <name> <PUBLIC|PRIVATE>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int owner_id = auth_get_user_id(client);
+            if (owner_id < 0) {
+                build_error(response, ERR_NOT_AUTH,
+                            "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int is_public;
+            if (strcmp(arg2, "PUBLIC") == 0)
+                is_public = 1;
+            else if (strcmp(arg2, "PRIVATE") == 0)
+                is_public = 0;
+            else {
+                build_error(response, ERR_INTERNAL,
+                            "Visibility must be PUBLIC or PRIVATE.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_create(owner_id, arg1, is_public);
+            if (rc == GROUP_OK) {
+                build_ok(response, "Group created.");
+            } else if (rc == GROUP_ERR_EXISTS) {
+                build_error(response, ERR_INTERNAL, "Group already exists.");
+            } else {
+                build_error(response, ERR_INTERNAL, "Could not create group.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        /* ================= JOIN_GROUP ================= */
+        if (strcmp(cmd, CMD_JOIN_GROUP) == 0)
+        {
+            if (!arg1) {
+                build_error(response, ERR_INTERNAL,
+                            "Usage: JOIN_GROUP <group_name>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH,
+                            "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_join_public(user_id, arg1);
+            if (rc == GROUP_OK) {
+                build_ok(response, "Joined group.");
+            } else if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_INTERNAL, "Group not found.");
+            } else if (rc == GROUP_ERR_NOT_PUBLIC) {
+                build_error(response, ERR_NO_PERMISSION,
+                            "Group is private. Use REQUEST_GROUP.");
+            } else if (rc == GROUP_ERR_ALREADY_MEMBER) {
+                build_error(response, ERR_INTERNAL, "You are already a member.");
+            } else {
+                build_error(response, ERR_INTERNAL, "Could not join group.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        /* ================= REQUEST_GROUP ================= */
+        if (strcmp(cmd, CMD_REQUEST_GROUP) == 0)
+        {
+            if (!arg1) {
+                build_error(response, ERR_INTERNAL,
+                            "Usage: REQUEST_GROUP <group_name>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH,
+                            "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_request_join(user_id, arg1);
+            if (rc == GROUP_OK) {
+                build_ok(response, "Join request sent.");
+            } else if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_INTERNAL, "Group not found.");
+            } else if (rc == GROUP_ERR_ALREADY_MEMBER) {
+                build_error(response, ERR_INTERNAL,
+                            "You are already a member.");
+            } else {
+                build_error(response, ERR_INTERNAL,
+                            "Could not send join request.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        /* ============== APPROVE_GROUP_MEMBER ============== */
+        if (strcmp(cmd, CMD_APPROVE_GROUP_MEMBER) == 0)
+        {
+            if (!arg1 || !arg2) {
+                build_error(response, ERR_INTERNAL,
+                            "Usage: APPROVE_GROUP_MEMBER <group_name> <username>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int admin_id = auth_get_user_id(client);
+            if (admin_id < 0) {
+                build_error(response, ERR_NOT_AUTH,
+                            "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_approve_member(admin_id, arg1, arg2);
+            if (rc == GROUP_OK) {
+                build_ok(response, "Member approved.");
+            } else if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_INTERNAL,
+                            "Group or user/request not found.");
+            } else if (rc == GROUP_ERR_NOT_ADMIN) {
+                build_error(response, ERR_NO_PERMISSION,
+                            "You are not group admin/owner.");
+            } else if (rc == GROUP_ERR_NO_REQUEST) {
+                build_error(response, ERR_INTERNAL,
+                            "No pending join request for this user.");
+            } else {
+                build_error(response, ERR_INTERNAL,
+                            "Could not approve member.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        /* ================= SEND_GROUP_MSG ================= */
+        if (strcmp(cmd, CMD_SEND_GROUP_MSG) == 0)
+        {
+            if (!arg1 || !arg2) {
+                build_error(response, ERR_INTERNAL,
+                            "Usage: SEND_GROUP_MSG <group_name> <message...>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int sender_id = auth_get_user_id(client);
+            if (sender_id < 0) {
+                build_error(response, ERR_NOT_AUTH,
+                            "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_send_group_msg(sender_id, arg1, arg2);
+            if (rc == GROUP_OK) {
+                build_ok(response, "Group message sent.");
+            } else if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_INTERNAL,
+                            "Group not found.");
+            } else if (rc == GROUP_ERR_NO_PERMISSION) {
+                // dacă vrei cod separat, poți defini GROUP_ERR_NO_PERMISSION;
+                // altfel folosești GROUP_ERR_NOT_ADMIN și mapezi mai generic.
+                build_error(response, ERR_NO_PERMISSION,
+                            "You are not a member of this group.");
+            } else {
+                build_error(response, ERR_INTERNAL,
+                            "Could not send group message.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        /* ================= LEAVE_GROUP ================= */
+        if (strcmp(cmd, CMD_LEAVE_GROUP) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (!arg1) {
+                build_error(response, ERR_BAD_ARGS, "Usage: LEAVE_GROUP <group_name>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_leave(user_id, arg1);
+
+            if (rc == GROUP_OK) {
+                build_ok(response, "You have left the group.");
+            }
+            else if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_GROUP_NOT_FOUND, "Group does not exist.");
+            }
+            else if (rc == GROUP_ERR_NO_PERMISSION) {
+                build_error(response, ERR_NO_PERMISSION, "You are not a member of this group.");
+            }
+            else {
+                build_error(response, ERR_INTERNAL, "Could not leave the group.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        if (strcmp(cmd, CMD_MEMBERS_GROUP) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (!arg1) {
+                build_error(response, ERR_BAD_ARGS, "Usage: GROUP_MEMBERS <group_name>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            struct GroupMemberInfo members[128];
+            int rc = groups_view_members(user_id, arg1, members, 128);
+
+            if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_GROUP_NOT_FOUND, "Group not found.");
+                write(client, response, strlen(response));
+                continue;
+            } else if (rc == GROUP_ERR_NO_PERMISSION) {
+                build_error(response, ERR_NO_PERMISSION, "You are not a member of this group.");
+                write(client, response, strlen(response));
+                continue;
+            } else if (rc < 0) {
+                build_error(response, ERR_INTERNAL, "Internal error.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            /* formatezi frumos pentru client */
+            char resp[MAX_CONTENT_LEN];
+            int off = 0;
+            off += snprintf(resp + off, sizeof(resp) - off,
+                            "Members of group %s:\n", arg1);
+            for (int i = 0; i < rc && off < (int)sizeof(resp); i++) {
+                off += snprintf(resp + off, sizeof(resp) - off,
+                                " - %s%s\n",
+                                members[i].username,
+                                members[i].is_admin ? " [admin]" : "");
+            }
+            write(client, resp, strlen(resp));
+            continue;
+        }
+
+        /* ================= LIST_GROUPS (MY_GROUPS) ================= */
+        if (strcmp(cmd, CMD_LIST_GROUPS) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (arg1 != NULL || arg2 != NULL) {
+                build_error(response, ERR_BAD_ARGS,
+                            "Usage: LIST_GROUPS (no arguments)");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            struct GroupInfo groups[128];
+            int count = groups_list_for_user(user_id, groups, 128);
+            if (count < 0) {
+                build_error(response, ERR_INTERNAL, "Could not list groups.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            /* formatare simplă pentru client */
+            char resp[MAX_CONTENT_LEN];
+            int off = 0;
+
+            if (count == 0) {
+                off += snprintf(resp + off, sizeof(resp) - off,
+                                "You are not a member of any group.\n");
+            } else {
+                off += snprintf(resp + off, sizeof(resp) - off,
+                                "Your groups:\n");
+                for (int i = 0; i < count && off < (int)sizeof(resp); i++) {
+                    off += snprintf(resp + off, sizeof(resp) - off,
+                                    " - %s%s%s\n",
+                                    groups[i].name,
+                                    groups[i].is_public ? " [public" : " [private",
+                                    groups[i].is_admin ? ", admin]" : "]");
+                }
+            }
+
+            write(client, resp, strlen(resp));
+            continue;
+        }
+
     }
 }

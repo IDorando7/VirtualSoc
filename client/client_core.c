@@ -4,23 +4,23 @@
 #include "protocol_client.h"
 #include "protocol.h"
 
-int client_connect(const char* host, int port)
+int client_connect(const char *host, int port)
 {
     struct sockaddr_in server;
     int sd;
-    if ((sd = socket (AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        perror ("Error at socket creation.\n");
+        perror("Error at socket creation.\n");
         return -1;
     }
 
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(host);
-    server.sin_port = htons (port);
+    server.sin_port = htons(port);
 
-    if (connect(sd, (struct sockaddr *) &server,sizeof (struct sockaddr)) == -1)
+    if (connect(sd, (struct sockaddr *) &server, sizeof(struct sockaddr)) == -1)
     {
-        perror ("[client]Eroare la connect().\n");
+        perror("[client]Eroare la connect().\n");
         return -1;
     }
     return sd;
@@ -74,11 +74,19 @@ void client_loop(int sockfd)
             printf("  delete_user <user>\n");
             printf("  delete_post <post>\n");
             printf("  delete_friend <user>\n");
+            printf("  create_group <group> <PUBLIC|PRIVATE>\n");
+            printf("  join_group <group>\n");
+            printf("  request_join <group>\n");
+            printf("  approve_member <group> <user> \n");
+            printf("  send_group <group> <text>\n");
+            printf("  view_members <group>\n");
+            printf("  leave_group <group>\n");
+            printf("  list_groups\n");
             printf("  exit\n");
             continue;
         }
 
-        char *cmd  = NULL;
+        char *cmd = NULL;
         char *arg1 = NULL;
         char *arg2 = NULL;
         Parser(buffer, &cmd, &arg1, &arg2);
@@ -166,165 +174,253 @@ void client_loop(int sockfd)
             continue;
         }
 
-    // view_public
-    if (strcmp(cmd, "view_public") == 0)
-    {
-        if (arg1 != NULL || arg2 != NULL)
+        // view_public
+        if (strcmp(cmd, "view_public") == 0)
         {
-            printf("Usage: view_public\n");
-            continue;
-        }
-        cmd_view_public(sockfd);
-        continue;
-    }
-
-    // view_feed
-    if (strcmp(cmd, "view_feed") == 0)
-    {
-        if (arg1 != NULL || arg2 != NULL)
-        {
-            printf("Usage: view_feed\n");
-            continue;
-        }
-        cmd_view_feed(sockfd);
-        continue;
-    }
-
-    // send message
-    if (strcmp(cmd, "send") == 0)
-    {
-        if (arg1 == NULL)
-        {
-            printf("Usage: send <username>\n");
+            if (arg1 != NULL || arg2 != NULL)
+            {
+                printf("Usage: view_public\n");
+                continue;
+            }
+            cmd_view_public(sockfd);
             continue;
         }
 
-        char msg[MAX_CONTENT_LEN];
-        printf("Message for %s: ", arg1);
-        fflush(stdout);
-        int n = read_and_normalize(msg, sizeof(msg));
-        if (n < 0)
+        // view_feed
+        if (strcmp(cmd, "view_feed") == 0)
         {
-            printf("Error at read");
-            break;
-        }
-
-        cmd_send_message(sockfd, arg1, msg);
-        continue;
-    }
-
-    // message view
-    if (strcmp(cmd, "messages") == 0)
-    {
-        if (arg1 == NULL)
-        {
-            printf("Usage: messages <username>\n");
+            if (arg1 != NULL || arg2 != NULL)
+            {
+                printf("Usage: view_feed\n");
+                continue;
+            }
+            cmd_view_feed(sockfd);
             continue;
         }
-        cmd_list_messages(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "add") == 0)
-    {
-        if (arg1 == NULL)
+        // send message
+        if (strcmp(cmd, "send") == 0)
         {
-            printf("Usage: add <username>\n");
+            if (arg1 == NULL)
+            {
+                printf("Usage: send <username>\n");
+                continue;
+            }
+
+            char msg[MAX_CONTENT_LEN];
+            printf("Message for %s: ", arg1);
+            fflush(stdout);
+            int n = read_and_normalize(msg, sizeof(msg));
+            if (n < 0)
+            {
+                printf("Error at read");
+                break;
+            }
+
+            cmd_send_message(sockfd, arg1, msg);
             continue;
         }
-        cmd_add_friend(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "friends") == 0)
-    {
-        if (arg1 != NULL)
+        // message view
+        if (strcmp(cmd, "messages") == 0)
         {
-            printf("Usage: friends\n");
+            if (arg1 == NULL)
+            {
+                printf("Usage: messages <username>\n");
+                continue;
+            }
+            cmd_list_messages(sockfd, arg1);
             continue;
         }
-        cmd_list_friends(sockfd);
-        continue;
-    }
 
-    if (strcmp(cmd, "change_vis") == 0)
-    {
-        if (arg1 == NULL || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
+        if (strcmp(cmd, "add") == 0)
         {
-            printf("Usage: change_vis <PUBLIC|PRIVATE>\n");
+            if (arg1 == NULL)
+            {
+                printf("Usage: add <username>\n");
+                continue;
+            }
+            cmd_add_friend(sockfd, arg1);
             continue;
         }
-        cmd_change_vis(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "make_admin") == 0)
-    {
-        if (arg1 == NULL)
+        if (strcmp(cmd, "friends") == 0)
         {
-            printf("Usage: make_admin <user>\n");
+            if (arg1 != NULL)
+            {
+                printf("Usage: friends\n");
+                continue;
+            }
+            cmd_list_friends(sockfd);
             continue;
         }
-        cmd_make_admin(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "delete_user") == 0)
-    {
-        if (arg1 == NULL)
+        if (strcmp(cmd, "change_vis") == 0)
         {
-            printf("Usage: delete_user <user>\n");
+            if (arg1 == NULL || (strcmp(arg1, "PUBLIC") != 0 && strcmp(arg1, "PRIVATE") != 0))
+            {
+                printf("Usage: change_vis <PUBLIC|PRIVATE>\n");
+                continue;
+            }
+            cmd_change_vis(sockfd, arg1);
             continue;
         }
-        cmd_delete_user(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "delete_post") == 0)
-    {
-        if (arg1 == NULL)
+        if (strcmp(cmd, "make_admin") == 0)
         {
-            printf("Usage: delete_user <post_id>\n");
+            if (arg1 == NULL)
+            {
+                printf("Usage: make_admin <user>\n");
+                continue;
+            }
+            cmd_make_admin(sockfd, arg1);
             continue;
         }
-        cmd_delete_post(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "view_user") == 0)
-    {
-        if (arg1 == NULL)
+        if (strcmp(cmd, "delete_user") == 0)
         {
-            printf("Usage: view_user <user>\n");
+            if (arg1 == NULL)
+            {
+                printf("Usage: delete_user <user>\n");
+                continue;
+            }
+            cmd_delete_user(sockfd, arg1);
             continue;
         }
-        cmd_view_user(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "delete_friend") == 0)
-    {
-        if (arg1 == NULL)
+        if (strcmp(cmd, "delete_post") == 0)
         {
-            printf("Usage: delete_friend <user>\n");
+            if (arg1 == NULL)
+            {
+                printf("Usage: delete_user <post_id>\n");
+                continue;
+            }
+            cmd_delete_post(sockfd, arg1);
             continue;
         }
-        cmd_delete_friend(sockfd, arg1);
-        continue;
-    }
 
-    if (strcmp(cmd, "change_friend") == 0)
-    {
-        if (arg1 == NULL || arg2 == NULL || (strcmp(arg2, "NORMAL") != 0 && strcmp(arg2, "CLOSE") != 0))
+        if (strcmp(cmd, "view_user") == 0)
         {
-            printf("Usage: change_friend <user> <NORMAL|CLOSE>\n");
+            if (arg1 == NULL)
+            {
+                printf("Usage: view_user <user>\n");
+                continue;
+            }
+            cmd_view_user(sockfd, arg1);
             continue;
         }
-        cmd_change_friend(sockfd, arg1, arg2);
-        continue;
-    }
 
-    printf("Unknown command: %s\n", cmd);
+        if (strcmp(cmd, "delete_friend") == 0)
+        {
+            if (arg1 == NULL)
+            {
+                printf("Usage: delete_friend <user>\n");
+                continue;
+            }
+            cmd_delete_friend(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "change_friend") == 0)
+        {
+            if (arg1 == NULL || arg2 == NULL || (strcmp(arg2, "NORMAL") != 0 && strcmp(arg2, "CLOSE") != 0))
+            {
+                printf("Usage: change_friend <user> <NORMAL|CLOSE>\n");
+                continue;
+            }
+            cmd_change_friend(sockfd, arg1, arg2);
+            continue;
+        }
+
+        if (strcmp(cmd, "create_group") == 0)
+        {
+            if (arg1 == NULL || arg2 == NULL || (strcmp(arg2, "PUBLIC") != 0 && strcmp(arg2, "PRIVATE") != 0))
+            {
+                printf("Usage: create_group <group> <NORMAL|CLOSE>\n");
+                continue;
+            }
+            cmd_create_group(sockfd, arg1, arg2);
+            continue;
+        }
+
+        if (strcmp(cmd, "join_group") == 0)
+        {
+            if (arg1 == NULL)
+            {
+                printf("Usage: join_group <group>\n");
+                continue;
+            }
+            cmd_join_group(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "request_join") == 0)
+        {
+            if (arg1 == NULL)
+            {
+                printf("Usage: request_join <group>\n");
+                continue;
+            }
+            cmd_request_join(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "approve_member") == 0)
+        {
+            if (arg1 == NULL || arg2 == NULL)
+            {
+                printf("Usage: approve_member <group> <user>\n");
+                continue;
+            }
+            cmd_approve_member(sockfd, arg1, arg2);
+            continue;
+        }
+
+        if (strcmp(cmd, "send_group") == 0)
+        {
+            if (arg1 == NULL || arg2 == NULL)
+            {
+                printf("Usage: send_group <group> <text>\n");
+                continue;
+            }
+            cmd_send_group(sockfd, arg1, arg2);
+            continue;
+        }
+
+        if (strcmp(cmd, "view_members") == 0)
+        {
+            if (arg1 == NULL)
+            {
+                printf("Usage: view_members <group>\n");
+                continue;
+            }
+            cmd_view_members(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "leave_group") == 0)
+        {
+            if (arg1 == NULL)
+            {
+                printf("Usage: leave_group <group>\n");
+                continue;
+            }
+            cmd_leave_group(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "list_groups") == 0)
+        {
+            if (arg1 != NULL)
+            {
+                printf("Usage: list_group\n");
+                continue;
+            }
+            cmd_view_group(sockfd);
+            continue;
+        }
+
+        printf("Unknown command: %s\n", cmd);
     }
 
     close(sockfd);

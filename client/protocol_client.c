@@ -255,4 +255,120 @@ void cmd_change_friend(int sockfd, const char* arg1, const char*arg2)
     printf("Server: %s", response);
 }
 
+void cmd_create_group(int sockfd, const char* arg1, const char *arg2)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s %s\n", CMD_CREATE_GROUP, arg1, arg2);
 
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_join_group(int sockfd, const char* arg1)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s\n", CMD_JOIN_GROUP, arg1);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_request_join(int sockfd, const char* arg1)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s\n", CMD_REQUEST_GROUP, arg1);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_approve_member(int sockfd, const char* arg1, const char* arg2)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s %s\n", CMD_APPROVE_GROUP_MEMBER, arg1, arg2);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_view_members(int sockfd, const char* arg1)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s\n", CMD_MEMBERS_GROUP, arg1);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_leave_group(int sockfd, const char* arg1)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s\n", CMD_LEAVE_GROUP, arg1);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_send_group(int sockfd, const char* arg1, const char* arg2)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s %s\n", CMD_SEND_GROUP_MSG, arg1, arg2);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_view_group(int sockfd)
+{
+    char response[MAX_CMD_LEN];
+
+    write(sockfd, CMD_LIST_GROUPS, strlen(CMD_LIST_GROUPS));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}

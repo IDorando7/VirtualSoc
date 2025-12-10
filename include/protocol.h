@@ -54,6 +54,11 @@
 #define CMD_JOIN_GROUP          "JOIN_GROUP"
 #define CMD_SEND_GROUP_MSG      "SEND_GROUP_MSG"
 #define CMD_MEMBERS_GROUP       "MEMBERS_GROUP"
+#define CMD_REQUEST_GROUP       "REQUEST_GROUP"
+#define CMD_APPROVE_GROUP_MEMBER "APPROVE_GROUP_MEMBER"
+#define CMD_LEAVE_GROUP         "LEAVE_GROUP"
+#define CMD_LIST_GROUPS         "LIST_GROUPS"
+
 
 // ------------
 // Error Codes
@@ -69,6 +74,7 @@
 #define ERR_NO_PERMISSION           "NO_PERMISSION"
 #define ERR_INTERNAL                "INTERNAL_ERROR"
 #define ERR_FRIENDSHIP_NOT_FOUND    "FRIENDSHIP_NOT_FOUND"
+#define ERR_GROUP_NOT_FOUND         "GROUP_NOT_FOUND"
 
 // --------
 // Helpers

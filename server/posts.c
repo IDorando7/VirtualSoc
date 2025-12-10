@@ -260,7 +260,7 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
     return count;
 }
 
-
+ 
 
 static const char* visibility_to_string(enum post_visibility v)
 {
