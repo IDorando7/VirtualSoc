@@ -325,12 +325,12 @@ int messages_get_history_dm(int user1_id, int user2_id,
 
 /* ======================= FORMATTER COLORAT ======================= */
 
-static const char* msg_side_label(int sender_id, int current_user_id)
+const char* msg_side_label(int sender_id, int current_user_id)
 {
     return (sender_id == current_user_id) ? "You" : "Them";
 }
 
-static const char* msg_sender_color(int sender_id, int current_user_id)
+const char* msg_sender_color(int sender_id, int current_user_id)
 {
     return (sender_id == current_user_id) ? "\033[32m" : "\033[36m"; // green vs cyan
 }

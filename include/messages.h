@@ -22,5 +22,7 @@ int messages_get_history_dm(int user1_id, int user2_id,
 void format_messages_for_client(char *buf, size_t buf_size,
                                 struct Message *msgs, int count,
                                 int current_user_id);
+const char* msg_side_label(int sender_id, int current_user_id);
+const char* msg_sender_color(int sender_id, int current_user_id);
 
 #endif

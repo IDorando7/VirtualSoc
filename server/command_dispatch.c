@@ -820,5 +820,236 @@ void command_dispatch(int client)
             continue;
         }
 
+        /* ================= GROUP_MESSAGES <group_name> ================= */
+        if (strcmp(cmd, CMD_GROUP_MESSAGES) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (arg1 == NULL) {
+                build_error(response, ERR_BAD_ARGS,
+                            "Usage: GROUP_MESSAGES <group_name>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            struct Message msgs[MAX_MESSAGE_LIST];
+            int count = groups_get_group_history(user_id, arg1, msgs, MAX_MESSAGE_LIST);
+
+            if (count < 0) {
+                if (count == -2) {
+                    build_error(response, ERR_INTERNAL, "Group not found.");
+                } else if (count == -3) {
+                    build_error(response, ERR_NO_PERMISSION,
+                                "You are not a member of this group.");
+                } else {
+                    build_error(response, ERR_INTERNAL,
+                                "Could not load group messages.");
+                }
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            char resp[8192];
+            format_group_messages_for_client(
+                resp, sizeof(resp),
+                arg1,           /* group_name */
+                msgs, count,
+                user_id         /* current_user_id pentru colorare/stânga-dreapta */
+            );
+
+            write(client, resp, strlen(resp));
+            continue;
+        }
+
+        /* ================= SET_GROUP_VIS <group_name> <PUBLIC|PRIVATE> ================= */
+        if (strcmp(cmd, CMD_SET_GROUP_VIS) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (arg1 == NULL || arg2 == NULL) {
+                build_error(response, ERR_BAD_ARGS,
+                            "Usage: SET_GROUP_VIS <group_name> <PUBLIC|PRIVATE>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int is_public;
+            if (strcmp(arg2, "PUBLIC") == 0) {
+                is_public = 1;
+            } else if (strcmp(arg2, "PRIVATE") == 0) {
+                is_public = 0;
+            } else {
+                build_error(response, ERR_BAD_ARGS,
+                            "Visibility must be PUBLIC or PRIVATE.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_set_visibility(user_id, arg1, is_public);
+            if (rc == GROUP_OK) {
+                build_ok(response, is_public
+                                   ? "Group visibility set to PUBLIC."
+                                   : "Group visibility set to PRIVATE.");
+            } else if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_INTERNAL, "Group not found.");
+            } else if (rc == GROUP_ERR_NOT_ADMIN) {
+                build_error(response, ERR_NO_PERMISSION,
+                            "Only group owner/admin can change visibility.");
+            } else {
+                build_error(response, ERR_INTERNAL,
+                            "Could not change group visibility.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        /* ================= KICK_GROUP_MEMBER <group> <user> ================= */
+        if (strcmp(cmd, CMD_KICK_GROUP_MEMBER) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (!arg1 || !arg2) {
+                build_error(response, ERR_BAD_ARGS,
+                            "Usage: KICK_GROUP_MEMBER <group_name> <username>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_kick_member(user_id, arg1, arg2);
+
+            if (rc == GROUP_OK) {
+                build_ok(response, "User removed from group.");
+            } else if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_USER_NOT_FOUND,
+                            "Group or user not found.");
+            } else if (rc == GROUP_ERR_NOT_ADMIN) {
+                build_error(response, ERR_NO_PERMISSION,
+                            "You must be group admin or owner.");
+            } else if (rc == GROUP_ERR_NO_PERMISSION) {
+                build_error(response, ERR_NO_PERMISSION,
+                            "Cannot remove this user (owner or not in group).");
+            } else {
+                build_error(response, ERR_INTERNAL,
+                            "Could not remove user from group.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        /* =============== LIST_GROUP_REQUESTS <group_name> ================= */
+
+        if (strcmp(cmd, CMD_LIST_GROUP_REQUESTS) == 0)
+        {
+            int admin_id = auth_get_user_id(client);
+            if (admin_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (!arg1) {
+                build_error(response, ERR_BAD_ARGS,
+                            "Usage: LIST_GROUP_REQUESTS <group_name>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            struct GroupRequestInfo reqs[128];
+            int count = groups_list_requests(admin_id, arg1, reqs, 128);
+
+            if (count == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_GROUP_NOT_FOUND, "Group not found.");
+                write(client, response, strlen(response));
+                continue;
+            }
+            if (count == GROUP_ERR_NOT_ADMIN) {
+                build_error(response, ERR_NO_PERMISSION, "You must be group admin.");
+                write(client, response, strlen(response));
+                continue;
+            }
+            if (count < 0) {
+                build_error(response, ERR_INTERNAL, "Could not fetch requests.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            char resp[4096];
+            int offset = 0;
+
+            offset += snprintf(resp + offset, sizeof(resp) - offset,
+                               "\033[32mOK\033[0m\nJOIN_REQUESTS %d\n\n", count);
+
+            for (int i = 0; i < count; i++) {
+                offset += snprintf(resp + offset, sizeof(resp) - offset,
+                                   " - %s (uid: %d)\n",
+                                   reqs[i].username,
+                                   reqs[i].user_id);
+            }
+
+            write(client, resp, strlen(resp));
+            continue;
+        }
+
+        /* ========== REJECT_GROUP_REQUEST <group> <username> ========== */
+
+        if (strcmp(cmd, CMD_REJECT_GROUP_REQUEST) == 0)
+        {
+            int admin_id = auth_get_user_id(client);
+            if (admin_id < 0) {
+                build_error(response, ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            if (!arg1 || !arg2) {
+                build_error(response, ERR_BAD_ARGS,
+                            "Usage: REJECT_GROUP_REQUEST <group> <username>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = groups_reject_request(admin_id, arg1, arg2);
+
+            if (rc == GROUP_ERR_NOT_FOUND) {
+                build_error(response, ERR_GROUP_NOT_FOUND, "Group or user not found.");
+            }
+            else if (rc == GROUP_ERR_NO_PERMISSION) {
+                build_error(response, ERR_NO_PERMISSION, "Not allowed.");
+            }
+            else if (rc == GROUP_ERR_NO_REQUEST) {
+                build_error(response, ERR_REQ_NOT_FOUND, "User has no pending request.");
+            }
+            else if (rc == GROUP_ERR_NOT_ADMIN) {
+                build_error(response, ERR_NO_PERMISSION, "Must be admin of the group.");
+            }
+            else if (rc < 0) {
+                build_error(response, ERR_INTERNAL, "Internal error.");
+            }
+            else {
+                build_ok(response, "Join request rejected.");
+            }
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+
     }
 }

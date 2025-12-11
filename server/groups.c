@@ -701,3 +701,630 @@ int groups_list_for_user(int user_id, struct GroupInfo *out_array, int max_size)
 
     return count;
 }
+
+void format_group_messages_for_client(char *buf, int buf_size, const char *group_name, struct Message *msgs, int count, int current_user_id)
+{
+    if (buf_size == 0)
+        return;
+
+    buf[0] = '\0';
+    int offset = 0;
+
+    /* Header */
+    offset += snprintf(buf + offset, buf_size - offset,
+                       "\033[32mOK\033[0m\n"
+                       "GROUP_MESSAGES %d\n"
+                       "Group: \033[36m%s\033[0m\n\n",
+                       count, group_name);
+
+    for (int i = 0; i < count; i++) {
+        if (offset >= (int)buf_size - 1)
+            break;
+
+        struct Message *m = &msgs[i];
+
+        /* Formatăm timpul */
+        char timebuf[64] = {0};
+        time_t t = m->created_at;
+        struct tm tm_info;
+        localtime_r(&t, &tm_info);
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm_info);
+
+        /* Stilurile vizuale ca la DM */
+        const char *side = msg_side_label(m->sender_id, current_user_id);
+        const char *sender_color = msg_sender_color(m->sender_id, current_user_id);
+
+        offset += snprintf(
+            buf + offset, buf_size - offset,
+            "\033[90m========== Group Message #%d ==========\033[0m\n"
+            "\033[35mGroup:\033[0m %s\n"
+            "\033[35mFrom:\033[0m %s%s\033[0m (%s)\n"
+            "\033[35mTime:\033[0m %s\n"
+            "\033[35mContent:\033[0m\n%s\n\n",
+            m->id,
+            group_name,
+            sender_color,
+            m->sender_name,
+            side,
+            timebuf,
+            m->content
+        );
+    }
+}
+
+int groups_get_group_history(int requester_id, const char *group_name, struct Message *out_array, int max_size)
+{
+    if (requester_id <= 0 || !group_name || !*group_name ||
+        !out_array || max_size <= 0)
+        return -1;
+
+    const char *sql_find_group =
+        "SELECT id FROM groups WHERE name = ?;";
+
+    const char *sql_check_member =
+        "SELECT COUNT(*) "
+        "FROM group_members "
+        "WHERE group_id = ? AND user_id = ?;";
+
+    const char *sql_list_msgs =
+        "SELECT gm.id, gm.sender_id, u.name, gm.content, gm.created_at "
+        "FROM group_messages gm "
+        "JOIN users u ON u.id = gm.sender_id "
+        "WHERE gm.group_id = ? "
+        "ORDER BY gm.created_at ASC "
+        "LIMIT ?;";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+    int group_id = -1;
+
+    pthread_mutex_lock(&db_mutex);
+
+    /* 1. Găsim grupul după nume */
+    rc = sqlite3_prepare_v2(g_db, sql_find_group, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[groups_get_group_history] prepare find_group failed: %s\n",
+                sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        group_id = sqlite3_column_int(stmt, 0);
+    } else {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return -2;  // grup inexistent
+    }
+    sqlite3_finalize(stmt);
+
+    /* 2. Verificăm dacă requester_id este membru în grup */
+    rc = sqlite3_prepare_v2(g_db, sql_check_member, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[groups_get_group_history] prepare check_member failed: %s\n",
+                sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, group_id);
+    sqlite3_bind_int(stmt, 2, requester_id);
+
+    int is_member = 0;
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        is_member = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (is_member <= 0) {
+        pthread_mutex_unlock(&db_mutex);
+        return -3;  // nu e membru, nu are voie
+    }
+
+    /* 3. Citim mesajele din group_messages */
+    rc = sqlite3_prepare_v2(g_db, sql_list_msgs, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[groups_get_group_history] prepare list_msgs failed: %s\n",
+                sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, group_id);
+    sqlite3_bind_int(stmt, 2, max_size);
+
+    int count = 0;
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size) {
+        struct Message *m = &out_array[count];
+
+        m->id              = sqlite3_column_int(stmt, 0);
+        m->conversation_id = group_id;  // nu e DM, dar punem group_id aici ca referință
+        m->sender_id       = sqlite3_column_int(stmt, 1);
+
+        const unsigned char *uname = sqlite3_column_text(stmt, 2);
+        if (uname) {
+            strncpy(m->sender_name,
+                    (const char*)uname,
+                    sizeof(m->sender_name) - 1);
+            m->sender_name[sizeof(m->sender_name) - 1] = '\0';
+        } else {
+            m->sender_name[0] = '\0';
+        }
+
+        const unsigned char *txt = sqlite3_column_text(stmt, 3);
+        if (txt) {
+            strncpy(m->content,
+                    (const char*)txt,
+                    sizeof(m->content) - 1);
+            m->content[sizeof(m->content) - 1] = '\0';
+        } else {
+            m->content[0] = '\0';
+        }
+
+        m->created_at = sqlite3_column_int(stmt, 4);
+
+        count++;
+    }
+
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[groups_get_group_history] list_msgs error: %s\n",
+                sqlite3_errmsg(g_db));
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return count;
+}
+
+int groups_set_visibility(int admin_id, const char *group_name, int is_public)
+{
+    if (admin_id <= 0 || !group_name || !*group_name)
+        return -1;
+
+    const char *sql_find_group =
+        "SELECT id, owner_id, is_public FROM groups WHERE name = ?;";
+
+    const char *sql_check_admin =
+        "SELECT role FROM group_members WHERE group_id = ? AND user_id = ?;";
+
+    const char *sql_update_vis =
+        "UPDATE groups SET is_public = ? WHERE id = ?;";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+    int group_id = -1;
+    int owner_id = -1;
+    int current_is_public = 0;
+
+    pthread_mutex_lock(&db_mutex);
+
+    /* 1. Căutăm grupul după nume */
+    rc = sqlite3_prepare_v2(g_db, sql_find_group, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[groups_set_visibility] prepare find_group failed: %s\n",
+                sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_TRANSIENT);
+
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        group_id         = sqlite3_column_int(stmt, 0);
+        owner_id         = sqlite3_column_int(stmt, 1);
+        current_is_public = sqlite3_column_int(stmt, 2);
+    } else {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_FOUND;  // grupul nu există
+    }
+    sqlite3_finalize(stmt);
+
+    /* Dacă valoarea e deja aceeași, poți considera OK direct */
+    if (current_is_public == (is_public ? 1 : 0)) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_OK;
+    }
+
+    /* 2. Verificăm dacă admin_id e owner sau admin în grup */
+    int is_admin = 0;
+    if (admin_id == owner_id) {
+        is_admin = 1;
+    } else {
+        rc = sqlite3_prepare_v2(g_db, sql_check_admin, -1, &stmt, NULL);
+        if (rc != SQLITE_OK) {
+            fprintf(stderr, "[groups_set_visibility] prepare check_admin failed: %s\n",
+                    sqlite3_errmsg(g_db));
+            pthread_mutex_unlock(&db_mutex);
+            return -1;
+        }
+
+        sqlite3_bind_int(stmt, 1, group_id);
+        sqlite3_bind_int(stmt, 2, admin_id);
+
+        rc = sqlite3_step(stmt);
+        if (rc == SQLITE_ROW) {
+            int role = sqlite3_column_int(stmt, 0);
+            if (role == 1)   // 1 = admin
+                is_admin = 1;
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    if (!is_admin) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_ADMIN;
+    }
+
+    /* 3. Updatăm is_public */
+    rc = sqlite3_prepare_v2(g_db, sql_update_vis, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[groups_set_visibility] prepare update failed: %s\n",
+                sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, is_public ? 1 : 0);
+    sqlite3_bind_int(stmt, 2, group_id);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[groups_set_visibility] update failed: %s\n",
+                sqlite3_errmsg(g_db));
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return GROUP_OK;
+}
+
+int groups_kick_member(
+    int admin_id,
+    const char *group_name,
+    const char *username
+)
+{
+    if (admin_id <= 0 || !group_name || !username)
+        return -1;
+
+    const char *sql_find_group =
+        "SELECT id, owner_id FROM groups WHERE name = ?;";
+
+    const char *sql_check_admin =
+        "SELECT role FROM group_members WHERE group_id = ? AND user_id = ?;";
+
+    const char *sql_get_user =
+        "SELECT id FROM users WHERE name = ?;";
+
+    const char *sql_delete_member =
+        "DELETE FROM group_members WHERE group_id = ? AND user_id = ?;";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    int group_id = -1;
+    int owner_id = -1;
+
+    pthread_mutex_lock(&db_mutex);
+
+    /* 1. Aflăm grupul */
+    rc = sqlite3_prepare_v2(g_db, sql_find_group, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        group_id = sqlite3_column_int(stmt, 0);
+        owner_id = sqlite3_column_int(stmt, 1);
+    } else {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_FOUND;
+    }
+    sqlite3_finalize(stmt);
+
+    /* 2. Verificăm dacă admin_id are drepturi */
+    int is_admin = 0;
+    if (admin_id == owner_id) {
+        is_admin = 1;
+    } else {
+        rc = sqlite3_prepare_v2(g_db, sql_check_admin, -1, &stmt, NULL);
+        if (rc != SQLITE_OK) {
+            pthread_mutex_unlock(&db_mutex);
+            return -1;
+        }
+
+        sqlite3_bind_int(stmt, 1, group_id);
+        sqlite3_bind_int(stmt, 2, admin_id);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            int role = sqlite3_column_int(stmt, 0);
+            if (role == 1) is_admin = 1;
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    if (!is_admin) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_ADMIN;
+    }
+
+    /* 3. Luăm user_id al persoanei de dat afară */
+    int user_id = -1;
+
+    rc = sqlite3_prepare_v2(g_db, sql_get_user, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        user_id = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (user_id <= 0) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_FOUND;
+    }
+
+    /* 4. Owner-ul nu poate fi dat afară */
+    if (user_id == owner_id) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NO_PERMISSION;
+    }
+
+    /* 5. Ștergem membrul */
+    rc = sqlite3_prepare_v2(g_db, sql_delete_member, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, group_id);
+    sqlite3_bind_int(stmt, 2, user_id);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    int changes = sqlite3_changes(g_db);
+    pthread_mutex_unlock(&db_mutex);
+
+    if (changes == 0)
+        return GROUP_ERR_NO_PERMISSION; // user nu era membru
+
+    return GROUP_OK;
+}
+
+int groups_list_requests(int admin_id, const char *group_name, struct GroupRequestInfo *out_array, int max_size)
+{
+    if (admin_id <= 0 || !group_name || !out_array || max_size <= 0)
+        return -1;
+
+    const char *sql_find_group =
+        "SELECT id, owner_id FROM groups WHERE name = ?;";
+
+    const char *sql_check_admin =
+        "SELECT role FROM group_members WHERE group_id = ? AND user_id = ?;";
+
+    const char *sql_list_requests =
+        "SELECT gr.user_id, u.name "
+        "FROM group_requests gr "
+        "JOIN users u ON u.id = gr.user_id "
+        "WHERE gr.group_id = ? "
+        "ORDER BY u.name;";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    int group_id = -1;
+    int owner_id = -1;
+
+    pthread_mutex_lock(&db_mutex);
+
+    /* 1. Aflăm grupul */
+    rc = sqlite3_prepare_v2(g_db, sql_find_group, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        group_id = sqlite3_column_int(stmt, 0);
+        owner_id = sqlite3_column_int(stmt, 1);
+    } else {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_FOUND;
+    }
+    sqlite3_finalize(stmt);
+
+    /* 2. Verificăm drepturile */
+    int is_admin = 0;
+    if (admin_id == owner_id) {
+        is_admin = 1;
+    } else {
+        rc = sqlite3_prepare_v2(g_db, sql_check_admin, -1, &stmt, NULL);
+        if (rc != SQLITE_OK) {
+            pthread_mutex_unlock(&db_mutex);
+            return -1;
+        }
+
+        sqlite3_bind_int(stmt, 1, group_id);
+        sqlite3_bind_int(stmt, 2, admin_id);
+
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            int role = sqlite3_column_int(stmt, 0);
+            if (role == 1) is_admin = 1;
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    if (!is_admin) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_ADMIN;
+    }
+
+    /* 3. Listăm cererile */
+    rc = sqlite3_prepare_v2(g_db, sql_list_requests, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, group_id);
+
+    int count = 0;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size) {
+        out_array[count].user_id = sqlite3_column_int(stmt, 0);
+
+        const unsigned char *uname = sqlite3_column_text(stmt, 1);
+        if (uname)
+            strncpy(out_array[count].username, (const char *)uname, sizeof(out_array[count].username) - 1);
+        else
+            out_array[count].username[0] = '\0';
+
+        count++;
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return count;
+}
+
+int groups_reject_request(int admin_id, const char *group_name, const char *username)
+{
+    if (admin_id <= 0 || !group_name || !username)
+        return -1;
+
+    const char *sql_find_group =
+        "SELECT id, owner_id FROM groups WHERE name = ?;";
+
+    const char *sql_check_admin =
+        "SELECT role FROM group_members WHERE group_id = ? AND user_id = ?;";
+
+    const char *sql_find_user =
+        "SELECT id FROM users WHERE name = ?;";
+
+    const char *sql_check_request =
+        "SELECT 1 FROM group_requests WHERE group_id = ? AND user_id = ?;";
+
+    const char *sql_delete_request =
+        "DELETE FROM group_requests WHERE group_id = ? AND user_id = ?;";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+    int group_id = -1;
+    int owner_id = -1;
+
+    pthread_mutex_lock(&db_mutex);
+
+    /* 1. Fix grupul */
+    rc = sqlite3_prepare_v2(g_db, sql_find_group, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        group_id = sqlite3_column_int(stmt, 0);
+        owner_id = sqlite3_column_int(stmt, 1);
+    } else {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_FOUND;
+    }
+    sqlite3_finalize(stmt);
+
+    /* 2. Verificăm dacă admin_id are voie */
+    int is_admin = (admin_id == owner_id);
+
+    if (!is_admin) {
+        rc = sqlite3_prepare_v2(g_db, sql_check_admin, -1, &stmt, NULL);
+        if (rc == SQLITE_OK) {
+            sqlite3_bind_int(stmt, 1, group_id);
+            sqlite3_bind_int(stmt, 2, admin_id);
+            if (sqlite3_step(stmt) == SQLITE_ROW) {
+                int role = sqlite3_column_int(stmt, 0);
+                if (role == 1) is_admin = 1;
+            }
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    if (!is_admin) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_ADMIN;
+    }
+
+    /* 3. Aflăm id user cerere */
+    int user_id = -1;
+
+    rc = sqlite3_prepare_v2(g_db, sql_find_user, -1, &stmt, NULL);
+    if (rc == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, username, -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt) == SQLITE_ROW)
+            user_id = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    if (user_id <= 0) {
+        pthread_mutex_unlock(&db_mutex);
+        return GROUP_ERR_NOT_FOUND;
+    }
+
+    /* 4. Verificăm dacă are cerere */
+    rc = sqlite3_prepare_v2(g_db, sql_check_request, -1, &stmt, NULL);
+    if (rc == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, group_id);
+        sqlite3_bind_int(stmt, 2, user_id);
+
+        if (sqlite3_step(stmt) != SQLITE_ROW) {
+            sqlite3_finalize(stmt);
+            pthread_mutex_unlock(&db_mutex);
+            return GROUP_ERR_NO_REQUEST;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    /* 5. Ștergem cererea */
+    rc = sqlite3_prepare_v2(g_db, sql_delete_request, -1, &stmt, NULL);
+    if (rc == SQLITE_OK) {
+        sqlite3_bind_int(stmt, 1, group_id);
+        sqlite3_bind_int(stmt, 2, user_id);
+        sqlite3_step(stmt);
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return GROUP_OK;
+}
+

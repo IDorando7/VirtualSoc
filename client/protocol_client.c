@@ -372,3 +372,84 @@ void cmd_view_group(int sockfd)
 
     printf("Server: %s", response);
 }
+
+void cmd_view_group_messages(int sockfd, const char* arg1)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s\n", CMD_GROUP_MESSAGES, arg1);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_set_group_vis(int sockfd, const char *arg1, const char *arg2)
+{
+    char buffer[MAX_CMD_LEN];
+    char response[MAX_CMD_LEN];
+
+    snprintf(buffer, sizeof(buffer),
+             "%s %s %s\n", CMD_SET_GROUP_VIS, arg1, arg2);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("%s", response);
+}
+
+void cmd_kick_member(int sockfd, const char *arg1, const char *arg2)
+{
+    char buffer[MAX_CMD_LEN];
+    char response[MAX_CMD_LEN];
+
+    snprintf(buffer, sizeof(buffer),
+             "%s %s %s\n", CMD_KICK_GROUP_MEMBER, arg1, arg2);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("%s", response);
+}
+
+void cmd_get_requests(int sockfd, const char *arg1)
+{
+    char response[MAX_CMD_LEN];
+    char buffer[MAX_CMD_LEN];
+    sprintf(buffer, "%s %s\n", CMD_LIST_GROUP_REQUESTS, arg1);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("Server: %s", response);
+}
+
+void cmd_reject_request(int sockfd, const char *arg1, const char *arg2)
+{
+    char buffer[MAX_CMD_LEN];
+    char response[MAX_CMD_LEN];
+
+    snprintf(buffer, sizeof(buffer),
+             "%s %s %s\n", CMD_REJECT_GROUP_REQUEST, arg1, arg2);
+
+    write(sockfd, buffer, strlen(buffer));
+
+    int n = read(sockfd, response, sizeof(response));
+    if (n < 0) return;
+    response[n] = '\0';
+
+    printf("%s", response);
+}

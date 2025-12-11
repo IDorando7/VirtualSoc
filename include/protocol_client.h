@@ -25,3 +25,8 @@ void cmd_view_members(int sockfd, const char* arg1);
 void cmd_leave_group(int sockfd, const char* arg1);
 void cmd_send_group(int sockfd, const char* arg1, const char* arg2);
 void cmd_view_group(int sockfd);
+void cmd_view_group_messages(int sockfd, const char* arg1);
+void cmd_set_group_vis(int sockfd, const char *arg1, const char *arg2);
+void cmd_kick_member(int sockfd, const char *arg1, const char *arg2);
+void cmd_get_requests(int sockfd, const char *arg1);
+void cmd_reject_request(int sockfd, const char *arg1, const char *arg2);

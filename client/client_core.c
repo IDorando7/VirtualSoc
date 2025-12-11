@@ -82,6 +82,11 @@ void client_loop(int sockfd)
             printf("  view_members <group>\n");
             printf("  leave_group <group>\n");
             printf("  list_groups\n");
+            printf("  view_group_messages <group>\n");
+            printf("  set_group_vis <group> <PUBLIC|PRIVATE>\n");
+            printf("  kick_group <group> <user>\n");
+            printf("  requests <group>\n");
+            printf("  reject <group> <user>\n");
             printf("  exit\n");
             continue;
         }
@@ -417,6 +422,61 @@ void client_loop(int sockfd)
                 continue;
             }
             cmd_view_group(sockfd);
+            continue;
+        }
+
+        if (strcmp(cmd, "view_group_messages") == 0)
+        {
+            if (arg1 == NULL)
+            {
+                printf("Usage: view_group_messages <group>\n");
+                continue;
+            }
+            cmd_view_group_messages(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "set_group_vis") == 0)
+        {
+            if (arg1 == NULL || arg2 == NULL || (strcmp(arg2, "PUBLIC") != 0 && strcmp(arg2, "PRIVATE") != 0))
+            {
+                printf("Usage: set_group_vis <group> <PUBLIC|PRIVATE>\n");
+                continue;
+            }
+            cmd_set_group_vis(sockfd, arg1, arg2);
+            continue;
+        }
+
+        if (strcmp(cmd, "kick_group") == 0)
+        {
+            if (arg1 == NULL || arg2 == NULL)
+            {
+                printf("Usage: kick_group <group> <user>\n");
+                continue;
+            }
+            cmd_kick_member(sockfd, arg1, arg2);
+            continue;
+        }
+
+        if (strcmp(cmd, "requests") == 0)
+        {
+            if (arg1 == NULL)
+            {
+                printf("Usage: requests <group>\n");
+                continue;
+            }
+            cmd_get_requests(sockfd, arg1);
+            continue;
+        }
+
+        if (strcmp(cmd, "reject") == 0)
+        {
+            if (arg1 == NULL || arg2 == NULL)
+            {
+                printf("Usage: rejects <group> <user>\n");
+                continue;
+            }
+            cmd_reject_request(sockfd, arg1, arg2);
             continue;
         }
 
