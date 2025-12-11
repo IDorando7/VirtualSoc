@@ -129,9 +129,6 @@ void client_loop(int sockfd)
                 printf("Usage: logout\n");
                 continue;
             }
-
-            printf("adadad\n");
-            fflush(stdout);
             cmd_logout(sockfd);
             continue;
         }
@@ -154,25 +151,23 @@ void client_loop(int sockfd)
             if (n < 0)
             {
                 printf("Error at read");
-                break;
+                continue;
             }
 
             if (strcmp(vis_str, "public") != 0 && strcmp(vis_str, "friends") != 0
                 && strcmp(vis_str, "close") != 0)
             {
                 printf("Invalid visibility argument");
-                break;
+                continue;
             }
 
             printf("Content: ");
             fflush(stdout);
             int m = read_and_normalize(content, sizeof(content));
-            printf("%s", content);
-            fflush(stdout);
             if (m < 0)
             {
                 printf("Error at read");
-                break;
+                continue;
             }
 
             cmd_post(sockfd, vis_str, content);

@@ -38,11 +38,7 @@ void cmd_logout(int sockfd)
 {
     char response[MAX_CMD_LEN];
 
-    printf("adsasaafafaf\n");
-
     write(sockfd, CMD_LOGOUT, strlen(CMD_LOGOUT));
-
-    printf("fadsaasdas\n");
 
     int n = read(sockfd, response, sizeof(response));
     if (n < 0) return;

@@ -3,9 +3,7 @@
 #define GROUPS_H
 
 #include "messages.h"
-#include "common.h"
 
-/* coduri de eroare pentru grupuri */
 #define GROUP_OK                  0
 #define GROUP_ERR_EXISTS          (-1)
 #define GROUP_ERR_NOT_FOUND       (-2)
@@ -15,21 +13,23 @@
 #define GROUP_ERR_NO_REQUEST      (-6)
 #define GROUP_ERR_NO_PERMISSION   (-7)
 
-/* info simplă despre un membru din grup */
-struct GroupMemberInfo {
+struct GroupMemberInfo
+{
     int  user_id;
     char username[64];
-    int  is_admin;   /* 1 = admin/owner, 0 = membru normal */
+    int  is_admin;
 };
 
-struct GroupInfo {
+struct GroupInfo
+{
     int  group_id;
     char name[64];
-    int  is_public;  /* 1 = public, 0 = privat */
-    int  is_admin;   /* 1 = user-ul e admin în acel grup */
+    int  is_public;
+    int  is_admin;
 };
 
-struct GroupRequestInfo {
+struct GroupRequestInfo
+{
     int user_id;
     char username[64];
 };

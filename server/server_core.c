@@ -6,12 +6,6 @@
 void* client_handler(void *);
 void answer(void *);
 
-void* pula_mea()
-{
-    printf("Pula mea\n");
-    return NULL;
-}
-
 int server_start(int port)
 {
     struct sockaddr_in server;
@@ -74,8 +68,6 @@ void server_run(int sd)
     }
 }
 
-
-
 void* client_handler(void * arg)
 {
     struct thData* args = (struct thData*)arg;
@@ -85,5 +77,4 @@ void* client_handler(void * arg)
     pthread_detach(pthread_self());
     close (args->client);
     return NULL;
-
 }

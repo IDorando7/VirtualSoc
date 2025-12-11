@@ -1,4 +1,3 @@
-// storage.c
 #include <sqlite3.h>
 #include <time.h>
 #include <pthread.h>
@@ -11,13 +10,14 @@ pthread_mutex_t db_mutex;
 int storage_init(const char *path)
 {
     int rc = sqlite3_open(path, &g_db);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot open DB: %s\n", sqlite3_errmsg(g_db));
         return -1;
     }
 
-    // inițializăm mutexul pentru DB
-    if (pthread_mutex_init(&db_mutex, NULL) != 0) {
+    if (pthread_mutex_init(&db_mutex, NULL) != 0)
+    {
         fprintf(stderr, "[storage] Cannot init db_mutex\n");
         sqlite3_close(g_db);
         g_db = NULL;
@@ -25,10 +25,6 @@ int storage_init(const char *path)
     }
 
     char *errmsg = NULL;
-
-    /* ----------------------------------------------------
-       1) Tabela POSTS
-       ---------------------------------------------------- */
     const char *sql_posts =
         "CREATE TABLE IF NOT EXISTS posts ("
         "  id         INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -45,29 +41,24 @@ int storage_init(const char *path)
         return -1;
     }
 
-    /* ----------------------------------------------------
-       2) Tabela CONVERSATIONS (DM + grupuri)
-       ---------------------------------------------------- */
     const char *sql_conversations =
         "CREATE TABLE IF NOT EXISTS conversations ("
         "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  title       TEXT NOT NULL,"              /* nume grup sau "" pentru DM */
-        "  is_group    INTEGER NOT NULL,"          /* 0 = DM, 1 = group */
-        "  visibility  INTEGER NOT NULL,"          /* 0=public,1=private,2=dm etc. */
+        "  title       TEXT NOT NULL,"
+        "  is_group    INTEGER NOT NULL,"
+        "  visibility  INTEGER NOT NULL,"
         "  created_by  INTEGER NOT NULL,"
         "  created_at  INTEGER NOT NULL"
         ");";
 
     rc = sqlite3_exec(g_db, sql_conversations, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create conversations table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ----------------------------------------------------
-       3) Tabela CONVERSATION_MEMBERS (membri DM & grup)
-       ---------------------------------------------------- */
     const char *sql_members =
         "CREATE TABLE IF NOT EXISTS conversation_members ("
         "  conversation_id  INTEGER NOT NULL,"
@@ -78,15 +69,13 @@ int storage_init(const char *path)
         ");";
 
     rc = sqlite3_exec(g_db, sql_members, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create conversation_members table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ----------------------------------------------------
-       4) Tabela MESSAGES (DM și GRUP – prin conversations)
-       ---------------------------------------------------- */
     const char *sql_messages =
         "CREATE TABLE IF NOT EXISTS messages ("
         "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -97,69 +86,61 @@ int storage_init(const char *path)
         ");";
 
     rc = sqlite3_exec(g_db, sql_messages, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create messages table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ----------------------------------------------------
-       5) Tabela FRIENDS
-       ---------------------------------------------------- */
     const char *sql_friends =
         "CREATE TABLE IF NOT EXISTS friends ("
         "  user_id   INTEGER NOT NULL,"
         "  friend_id INTEGER NOT NULL,"
-        "  type      INTEGER NOT NULL,"   /* FRIEND_NORMAL / FRIEND_CLOSE */
+        "  type      INTEGER NOT NULL,"
         "  PRIMARY KEY (user_id, friend_id)"
         ");";
 
     rc = sqlite3_exec(g_db, sql_friends, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create friends table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ====================================================
-       6) TABELA GROUPS  (pentru groups.c)
-       ==================================================== */
     const char *sql_groups =
         "CREATE TABLE IF NOT EXISTS groups ("
         "  id        INTEGER PRIMARY KEY AUTOINCREMENT,"
         "  name      TEXT UNIQUE NOT NULL,"
         "  owner_id  INTEGER NOT NULL,"
-        "  is_public INTEGER NOT NULL"   /* 1=public, 0=private */
+        "  is_public INTEGER NOT NULL"
         ");";
 
     rc = sqlite3_exec(g_db, sql_groups, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create groups table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ----------------------------------------------------
-       7) Tabela GROUP_MEMBERS
-       ---------------------------------------------------- */
     const char *sql_group_members =
         "CREATE TABLE IF NOT EXISTS group_members ("
         "  group_id INTEGER NOT NULL,"
         "  user_id  INTEGER NOT NULL,"
-        "  role     INTEGER NOT NULL,"   /* 1 = admin, 0 = member */
+        "  role     INTEGER NOT NULL,"
         "  PRIMARY KEY (group_id, user_id)"
         ");";
 
     rc = sqlite3_exec(g_db, sql_group_members, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create group_members table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ----------------------------------------------------
-       8) Tabela GROUP_REQUESTS (cereri pentru grupuri private)
-       ---------------------------------------------------- */
     const char *sql_group_requests =
         "CREATE TABLE IF NOT EXISTS group_requests ("
         "  group_id INTEGER NOT NULL,"
@@ -168,15 +149,13 @@ int storage_init(const char *path)
         ");";
 
     rc = sqlite3_exec(g_db, sql_group_requests, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create group_requests table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ----------------------------------------------------
-       9) Tabela GROUP_MESSAGES (mesaje pe grup – folosită în groups.c)
-       ---------------------------------------------------- */
     const char *sql_group_messages =
         "CREATE TABLE IF NOT EXISTS group_messages ("
         "  id         INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -187,15 +166,13 @@ int storage_init(const char *path)
         ");";
 
     rc = sqlite3_exec(g_db, sql_group_messages, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[storage] Cannot create group_messages table: %s\n", errmsg);
         sqlite3_free(errmsg);
         return -1;
     }
 
-    /* ----------------------------------------------------
-       TOTUL E OK
-       ---------------------------------------------------- */
     printf("[storage] Database initialized successfully.\n");
     return 0;
 }

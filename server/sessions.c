@@ -1,21 +1,9 @@
-// sessions.c
-
 #include <stdio.h>
 #include <pthread.h>
 #include <sqlite3.h>
 
 #include "sessions.h"
 #include "storage.h"   // g_db, db_mutex
-
-/*
- * Implementare pentru tabela `sessions`.
- *
- *  sessions(
- *      id        INTEGER PRIMARY KEY AUTOINCREMENT,
- *      client_fd INTEGER UNIQUE NOT NULL,
- *      user_id   INTEGER NOT NULL
- *  );
- */
 
 int sessions_init()
 {
@@ -35,7 +23,8 @@ int sessions_init()
     pthread_mutex_lock(&db_mutex);
 
     rc = sqlite3_exec(g_db, sql_create, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[sessions] Cannot create sessions table: %s\n", errmsg);
         sqlite3_free(errmsg);
         pthread_mutex_unlock(&db_mutex);
@@ -43,7 +32,8 @@ int sessions_init()
     }
 
     rc = sqlite3_exec(g_db, sql_clear, NULL, NULL, &errmsg);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[sessions] Cannot clear sessions: %s\n", errmsg);
         sqlite3_free(errmsg);
         pthread_mutex_unlock(&db_mutex);
@@ -54,11 +44,6 @@ int sessions_init()
     return 0;
 }
 
-/*
- * Creează sau actualizează sesiunea:
- *  - dacă există deja o intrare cu client_fd, îi dă update la user_id
- *  - altfel inserează unul nou.
- */
 int sessions_set(int client_fd, int user_id)
 {
     const char *sql =
@@ -70,9 +55,9 @@ int sessions_set(int client_fd, int user_id)
     int rc;
 
     pthread_mutex_lock(&db_mutex);
-
     rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[sessions] prepare upsert failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
@@ -82,7 +67,8 @@ int sessions_set(int client_fd, int user_id)
     sqlite3_bind_int(stmt, 2, user_id);
 
     rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
+    if (rc != SQLITE_DONE)
+    {
         fprintf(stderr, "[sessions] upsert failed: %s\n", sqlite3_errmsg(g_db));
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
@@ -94,14 +80,8 @@ int sessions_set(int client_fd, int user_id)
     return 0;
 }
 
-/*
- * Șterge sesiunea pentru client_fd = client_fd.
- */
 int sessions_clear(int client_fd)
 {
-
-    printf("ioed\n");
-    fflush(stdout);
     const char *sql =
         "DELETE FROM sessions WHERE client_fd = ?;";
 
@@ -111,19 +91,18 @@ int sessions_clear(int client_fd)
     pthread_mutex_lock(&db_mutex);
 
     rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[sessions] prepare delete failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
     }
 
-    printf("ioed`\n");
-    fflush(stdout);
-
     sqlite3_bind_int(stmt, 1, client_fd);
 
     rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
+    if (rc != SQLITE_DONE)
+    {
         fprintf(stderr, "[sessions] delete failed: %s\n", sqlite3_errmsg(g_db));
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
@@ -132,14 +111,9 @@ int sessions_clear(int client_fd)
 
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&db_mutex);
-    printf("ioed2\n");
-    fflush(stdout);
     return 0;
 }
 
-/*
- * Întoarce user_id pentru client_fd, sau -1 dacă nu e logat.
- */
 int sessions_get_user_id(int client_fd)
 {
     const char *sql =
@@ -152,7 +126,8 @@ int sessions_get_user_id(int client_fd)
     pthread_mutex_lock(&db_mutex);
 
     rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[sessions] prepare get user_id failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
@@ -172,14 +147,6 @@ int sessions_get_user_id(int client_fd)
     return user_id;
 }
 
-/*
- * Întoarce client_fd pentru user_id (dacă userul e online).
- *  - dacă userul nu are sesiune activă, întoarce -1.
- *
- * Atenție: dacă permiți login multiplu aceluiași user de pe mai multe
- * conexiuni, tabela `sessions` poate avea mai multe rânduri cu același user_id.
- * Momentan luăm doar PRIMUL găsit.
- */
 int sessions_find_fd_by_user_id(int user_id)
 {
     const char *sql =
@@ -192,7 +159,8 @@ int sessions_find_fd_by_user_id(int user_id)
     pthread_mutex_lock(&db_mutex);
 
     rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[sessions] prepare find fd failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;

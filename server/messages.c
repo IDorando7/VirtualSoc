@@ -5,42 +5,19 @@
 #include <sqlite3.h>
 
 #include "messages.h"
-#include "storage.h"   // g_db, db_mutex
-#include "models.h"    // pentru user_id etc.
+#include "storage.h"
+#include "models.h"
 
-/*
- * Funcții expuse:
- *
- *  int messages_find_or_create_dm(int user1_id, int user2_id);
- *  int messages_add(int conversation_id, int sender_id, const char *content);
- *  int messages_get_history_dm(int user1_id, int user2_id,
- *                              struct Message *out_array, int max_size);
- *  void format_messages_for_client(char *buf, size_t buf_size,
- *                                  struct Message *msgs, int count,
- *                                  int current_user_id);
- */
-
-/* Helper: ordonează user1/user2 ca să fie canonici (mai micul primul) */
 static void sort_pair(int *a, int *b)
 {
-    if (*a > *b) {
+    if (*a > *b)
+    {
         int tmp = *a;
         *a = *b;
         *b = tmp;
     }
 }
 
-/*
- * Caută o conversație DM între user1 și user2 (is_group = 0).
- * Dacă există, întoarce conversation_id.
- * Dacă nu, creează:
- *   - conversations(is_group=0, created_by = user1, created_at = now)
- *   - conversation_members pentru user1 și user2
- *
- * Return:
- *   >= 1  -> conversation_id
- *   -1    -> eroare
- */
 int messages_find_or_create_dm(int user1_id, int user2_id)
 {
     if (user1_id <= 0 || user2_id <= 0)
@@ -62,9 +39,9 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
 
     pthread_mutex_lock(&db_mutex);
 
-    /* Căutăm conversația DM existentă */
     rc = sqlite3_prepare_v2(g_db, sql_find, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[messages] find DM prepare failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
@@ -74,7 +51,8 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
     sqlite3_bind_int(stmt, 2, user2_id);
 
     rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) {
+    if (rc == SQLITE_ROW)
+    {
         conv_id = sqlite3_column_int(stmt, 0);
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
@@ -82,24 +60,25 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
     }
     sqlite3_finalize(stmt);
 
-    /* Dacă nu există, creăm conversația și membrii */
     const char *sql_insert_conv =
         "INSERT INTO conversations(title, is_group, visibility, created_by, created_at) "
         "VALUES (?, 0, 2, ?, ?);";
 
     rc = sqlite3_prepare_v2(g_db, sql_insert_conv, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[messages] insert conv prepare failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
     }
 
-    sqlite3_bind_text(stmt, 1, "", -1, SQLITE_TRANSIENT); // title = ""
+    sqlite3_bind_text(stmt, 1, "", -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(stmt, 2, user1_id);
     sqlite3_bind_int(stmt, 3, (int)time(NULL));
 
     rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
+    if (rc != SQLITE_DONE)
+    {
         fprintf(stderr, "[messages] insert conv failed: %s\n", sqlite3_errmsg(g_db));
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
@@ -109,24 +88,24 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
     conv_id = (int)sqlite3_last_insert_rowid(g_db);
     sqlite3_finalize(stmt);
 
-    /* Inserăm membrii în conversation_members */
     const char *sql_insert_member =
         "INSERT INTO conversation_members(conversation_id, user_id, joined_at) "
         "VALUES (?, ?, ?);";
 
     rc = sqlite3_prepare_v2(g_db, sql_insert_member, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[messages] insert member prepare failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
     }
 
-    /* user1 */
     sqlite3_bind_int(stmt, 1, conv_id);
     sqlite3_bind_int(stmt, 2, user1_id);
     sqlite3_bind_int(stmt, 3, (int)time(NULL));
     rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
+    if (rc != SQLITE_DONE)
+    {
         fprintf(stderr, "[messages] insert member1 failed: %s\n", sqlite3_errmsg(g_db));
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
@@ -135,12 +114,12 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
 
     sqlite3_reset(stmt);
 
-    /* user2 */
     sqlite3_bind_int(stmt, 1, conv_id);
     sqlite3_bind_int(stmt, 2, user2_id);
     sqlite3_bind_int(stmt, 3, (int)time(NULL));
     rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
+    if (rc != SQLITE_DONE)
+    {
         fprintf(stderr, "[messages] insert member2 failed: %s\n", sqlite3_errmsg(g_db));
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
@@ -153,13 +132,6 @@ int messages_find_or_create_dm(int user1_id, int user2_id)
     return conv_id;
 }
 
-/*
- * Adaugă un mesaj într-o conversație.
- *
- * Return:
- *   >= 1 -> id-ul mesajului
- *   -1   -> eroare
- */
 int messages_add(int conversation_id, int sender_id, const char *content)
 {
     if (conversation_id <= 0 || sender_id <= 0 || !content)
@@ -175,7 +147,8 @@ int messages_add(int conversation_id, int sender_id, const char *content)
     pthread_mutex_lock(&db_mutex);
 
     rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[messages] insert msg prepare failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
@@ -187,7 +160,8 @@ int messages_add(int conversation_id, int sender_id, const char *content)
     sqlite3_bind_int(stmt, 4, (int)time(NULL));
 
     rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE) {
+    if (rc != SQLITE_DONE)
+    {
         fprintf(stderr, "[messages] insert msg failed: %s\n", sqlite3_errmsg(g_db));
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
@@ -201,25 +175,12 @@ int messages_add(int conversation_id, int sender_id, const char *content)
     return msg_id;
 }
 
-/*
- * Întoarce istoricul mesajelor din DM dintre user1 și user2, ordonate crescător după timp.
- *
- * Return:
- *   >=0 -> număr de mesaje
- *   -1  -> eroare
- *    0  -> niciun mesaj / niciun DM încă
- */
-int messages_get_history_dm(int user1_id, int user2_id,
-                            struct Message *out_array, int max_size)
+int messages_get_history_dm(int user1_id, int user2_id, struct Message *out_array, int max_size)
 {
     if (max_size <= 0)
         return 0;
-
     sort_pair(&user1_id, &user2_id);
-
     int conv_id = -1;
-
-    /* Mai întâi găsim conversația DM */
     {
         const char *sql_find =
             "SELECT c.id "
@@ -235,7 +196,8 @@ int messages_get_history_dm(int user1_id, int user2_id,
         pthread_mutex_lock(&db_mutex);
 
         rc = sqlite3_prepare_v2(g_db, sql_find, -1, &stmt, NULL);
-        if (rc != SQLITE_OK) {
+        if (rc != SQLITE_OK)
+        {
             fprintf(stderr, "[messages] history find DM prepare failed: %s\n", sqlite3_errmsg(g_db));
             pthread_mutex_unlock(&db_mutex);
             return -1;
@@ -245,22 +207,18 @@ int messages_get_history_dm(int user1_id, int user2_id,
         sqlite3_bind_int(stmt, 2, user2_id);
 
         rc = sqlite3_step(stmt);
-        if (rc == SQLITE_ROW) {
+        if (rc == SQLITE_ROW)
             conv_id = sqlite3_column_int(stmt, 0);
-        } else if (rc != SQLITE_DONE) {
+        else if (rc != SQLITE_DONE)
             fprintf(stderr, "[messages] history find DM error: %s\n", sqlite3_errmsg(g_db));
-        }
 
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&db_mutex);
     }
 
-    if (conv_id <= 0) {
-        /* Nu există DM încă, deci nu avem mesaje */
+    if (conv_id <= 0)
         return 0;
-    }
 
-    /* Acum extragem mesajele din această conversație */
     const char *sql_msgs =
         "SELECT m.id, m.conversation_id, m.sender_id, u.name, m.content, m.created_at "
         "FROM messages m "
@@ -274,7 +232,8 @@ int messages_get_history_dm(int user1_id, int user2_id,
     pthread_mutex_lock(&db_mutex);
 
     rc = sqlite3_prepare_v2(g_db, sql_msgs, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
+    if (rc != SQLITE_OK)
+    {
         fprintf(stderr, "[messages] history prepare failed: %s\n", sqlite3_errmsg(g_db));
         pthread_mutex_unlock(&db_mutex);
         return -1;
@@ -283,7 +242,8 @@ int messages_get_history_dm(int user1_id, int user2_id,
     sqlite3_bind_int(stmt, 1, conv_id);
 
     int count = 0;
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size) {
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size)
+    {
         out_array[count].id             = sqlite3_column_int(stmt, 0);
         out_array[count].conversation_id = sqlite3_column_int(stmt, 1);
         out_array[count].sender_id      = sqlite3_column_int(stmt, 2);
@@ -313,17 +273,13 @@ int messages_get_history_dm(int user1_id, int user2_id,
         count++;
     }
 
-    if (rc != SQLITE_DONE) {
+    if (rc != SQLITE_DONE)
         fprintf(stderr, "[messages] history select error: %s\n", sqlite3_errmsg(g_db));
-    }
-
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&db_mutex);
 
     return count;
 }
-
-/* ======================= FORMATTER COLORAT ======================= */
 
 const char* msg_side_label(int sender_id, int current_user_id)
 {
@@ -332,12 +288,10 @@ const char* msg_side_label(int sender_id, int current_user_id)
 
 const char* msg_sender_color(int sender_id, int current_user_id)
 {
-    return (sender_id == current_user_id) ? "\033[32m" : "\033[36m"; // green vs cyan
+    return (sender_id == current_user_id) ? "\033[32m" : "\033[36m";
 }
 
-void format_messages_for_client(char *buf, size_t buf_size,
-                                struct Message *msgs, int count,
-                                int current_user_id)
+void format_messages_for_client(char *buf, size_t buf_size, struct Message *msgs, int count, int current_user_id)
 {
     if (buf_size == 0)
         return;
@@ -348,13 +302,12 @@ void format_messages_for_client(char *buf, size_t buf_size,
     offset += snprintf(buf + offset, buf_size - offset,
                        "\033[32mOK\033[0m\nMESSAGES %d\n\n", count);
 
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++)
+    {
         if (offset >= (int)buf_size - 1)
             break;
 
         struct Message *m = &msgs[i];
-
-        /* formatăm data */
         char timebuf[64] = {0};
         time_t t = m->created_at;
         struct tm tm_info;
