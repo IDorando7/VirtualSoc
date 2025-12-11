@@ -802,7 +802,6 @@ int groups_get_group_history(int requester_id, const char *group_name, struct Me
 
     pthread_mutex_lock(&db_mutex);
 
-    /* 1. Găsim grupul după nume */
     rc = sqlite3_prepare_v2(g_db, sql_find_group, -1, &stmt, NULL);
     if (rc != SQLITE_OK)
     {
@@ -1175,7 +1174,6 @@ int groups_list_requests(int admin_id, const char *group_name, struct GroupReque
 
     pthread_mutex_lock(&db_mutex);
 
-    /* 1. Aflăm grupul */
     rc = sqlite3_prepare_v2(g_db, sql_find_group, -1, &stmt, NULL);
     if (rc != SQLITE_OK)
     {

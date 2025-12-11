@@ -3,7 +3,7 @@
 #include <sqlite3.h>
 
 #include "sessions.h"
-#include "storage.h"   // g_db, db_mutex
+#include "storage.h"
 
 int sessions_init()
 {
