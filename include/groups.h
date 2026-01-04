@@ -48,5 +48,10 @@ int groups_set_visibility(int admin_id, const char *group_name, int is_public);
 int groups_kick_member(int admin_id, const char *group_name, const char *username);
 int groups_list_requests(int admin_id, const char *group_name, struct GroupRequestInfo *out_array, int max_size);
 int groups_reject_request(int admin_id, const char *group_name, const char *username);
+int groups_list_member_ids(const char *group_name, int *out_ids, int max_ids);
+void group_messages_send_for_client(int client_fd,
+                                    const char *group_name,
+                                    struct Message *msgs, int count,
+                                    int current_user_id);
 
 #endif

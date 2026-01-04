@@ -11,6 +11,7 @@ static const char* visibility_to_string(enum post_visibility v);
 void format_posts_for_client(char *buf, int buf_size, struct Post *posts, int count);
 int posts_delete(int requester_id, int post_id);
 int posts_get_for_user(int viewer_id, int target_user_id, struct Post *out_array, int max_size);
+void posts_send_for_client(int client_fd, struct Post *posts, int count);
 
 #endif
 

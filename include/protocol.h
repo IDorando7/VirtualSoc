@@ -61,14 +61,4 @@
 #define ERR_GROUP_NOT_FOUND         "GROUP_NOT_FOUND"
 #define ERR_REQ_NOT_FOUND           "REQ_NOT_FOUND"
 
-static void build_ok(char *buf, const char *msg)
-{
-    sprintf(buf, "%s %s\n", RESP_OK, msg);
-}
-
-static void build_error(char *buf, const char *err_code, const char *msg)
-{
-    sprintf(buf, "%s %s %s\n", RESP_ERROR, err_code, msg);
-}
-
 #endif

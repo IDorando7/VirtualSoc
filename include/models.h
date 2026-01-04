@@ -29,6 +29,7 @@ struct Post
     char author_name[64];
     enum post_visibility vis;
     char content[1024];
+    int created_at;
 };
 
 struct Session

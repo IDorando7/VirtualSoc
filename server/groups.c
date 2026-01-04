@@ -1372,3 +1372,99 @@ int groups_reject_request(int admin_id, const char *group_name, const char *user
     return GROUP_OK;
 }
 
+int groups_list_member_ids(const char *group_name, int *out_ids, int max_ids)
+{
+    if (!group_name || !out_ids || max_ids <= 0) return -1;
+
+    const char *sql =
+        "SELECT gm.user_id "
+        "FROM group_members gm "
+        "JOIN groups g ON g.id = gm.group_id "
+        "WHERE g.name = ? "
+        "ORDER BY gm.user_id;";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    pthread_mutex_lock(&db_mutex);
+
+    rc = sqlite3_prepare_v2(g_db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "[groups_list_member_ids] prepare failed: %s\n", sqlite3_errmsg(g_db));
+        pthread_mutex_unlock(&db_mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, group_name, -1, SQLITE_TRANSIENT);
+
+    int count = 0;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_ids) {
+        out_ids[count++] = sqlite3_column_int(stmt, 0);
+    }
+
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "[groups_list_member_ids] step failed: %s\n", sqlite3_errmsg(g_db));
+    }
+
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&db_mutex);
+
+    return count;
+}
+
+static void write_all(int fd, const char *buf, size_t len)
+{
+    size_t off = 0;
+    while (off < len) {
+        ssize_t n = write(fd, buf + off, len - off);
+        if (n <= 0) return;
+        off += (size_t)n;
+    }
+}
+
+void group_messages_send_for_client(int client_fd,
+                                    const char *group_name,
+                                    struct Message *msgs, int count,
+                                    int current_user_id)
+{
+    char out[4096];
+    int off = 0;
+
+    if (!group_name) group_name = "";
+
+    off = snprintf(out, sizeof(out),
+                   "\033[32mOK\033[0m\nGROUP_MESSAGES %d\n"
+                   "\033[35mGroup:\033[0m \033[36m%s\033[0m\n\n",
+                   count, group_name);
+    write_all(client_fd, out, (size_t)off);
+
+    for (int i = 0; i < count; i++) {
+        struct Message *m = &msgs[i];
+
+        char timebuf[64] = {0};
+        time_t t = (time_t)m->created_at;
+        struct tm tm_info;
+        localtime_r(&t, &tm_info);
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm_info);
+
+        const char *side = msg_side_label(m->sender_id, current_user_id);
+        const char *sender_color = msg_sender_color(m->sender_id, current_user_id);
+
+        off = snprintf(out, sizeof(out),
+                       "\033[90m========== Group Message #%d ==========\033[0m\n"
+                       "\033[35mFrom:\033[0m %s%s\033[0m (%s)\n"
+                       "\033[35mTime:\033[0m \033[34m%s\033[0m\n"
+                       "\033[35mContent:\033[0m\n%s\n\n",
+                       m->id,
+                       sender_color,
+                       m->sender_name,
+                       side,
+                       timebuf,
+                       m->content);
+
+        write_all(client_fd, out, (size_t)off);
+    }
+
+    write_all(client_fd, "END\n", 4);
+}
+

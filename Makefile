@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -Iinclude
 
-COMMON_SRC = common/buffer.c common/helpers.c
+COMMON_SRC = common/buffer.c common/helpers.c common/response.c
 
 SERVER_SRC = \
     server/main_server.c \
@@ -15,6 +15,7 @@ SERVER_SRC = \
     server/storage.c \
     server/sessions.c \
     server/groups.c \
+    server/notify_server.c \
     client/utils_client.c\
     $(COMMON_SRC)
 

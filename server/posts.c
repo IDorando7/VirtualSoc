@@ -58,7 +58,7 @@ int posts_get_public(struct Post *out_array, int max_size)
         return 0;
 
     const char *sql =
-        "SELECT p.id, p.author_id, u.name, p.visibility, p.content "
+        "SELECT p.id, p.author_id, u.name, p.visibility, p.content, p.created_at "
         "FROM posts p "
         "JOIN users u ON u.id = p.author_id "
         "WHERE p.visibility = ? "
@@ -88,9 +88,10 @@ int posts_get_public(struct Post *out_array, int max_size)
     int count = 0;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size)
     {
-        out_array[count].id        = sqlite3_column_int(stmt, 0);
-        out_array[count].author_id = sqlite3_column_int(stmt, 1);
-        out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
+        out_array[count].id         = sqlite3_column_int(stmt, 0);
+        out_array[count].author_id  = sqlite3_column_int(stmt, 1);
+        out_array[count].vis        = (enum post_visibility)sqlite3_column_int(stmt, 3);
+        out_array[count].created_at = sqlite3_column_int(stmt, 5);
 
         const char *uname = (const char *)sqlite3_column_text(stmt, 2);
         const char *txt   = (const char *)sqlite3_column_text(stmt, 4);
@@ -123,7 +124,7 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
     if (max_size <= 0) return 0;
 
     const char *sql =
-        "SELECT p.id, p.author_id, u.name, p.visibility, p.content "
+        "SELECT p.id, p.author_id, u.name, p.visibility, p.content, p.created_at "
         "FROM posts p "
         "JOIN users u ON u.id = p.author_id "
         "LEFT JOIN friends f1 "
@@ -173,9 +174,10 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
 
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size)
     {
-        out_array[count].id        = sqlite3_column_int(stmt, 0);
-        out_array[count].author_id = sqlite3_column_int(stmt, 1);
-        out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
+        out_array[count].id         = sqlite3_column_int(stmt, 0);
+        out_array[count].author_id  = sqlite3_column_int(stmt, 1);
+        out_array[count].vis        = (enum post_visibility)sqlite3_column_int(stmt, 3);
+        out_array[count].created_at = sqlite3_column_int(stmt, 5);
 
         const char *uname = (const char *)sqlite3_column_text(stmt, 2);
         const char *txt   = (const char *)sqlite3_column_text(stmt, 4);
@@ -202,6 +204,7 @@ int posts_get_feed_for_user(int user_id, struct Post *out_array, int max_size)
 
     return count;
 }
+
 
 static const char* visibility_to_string(enum post_visibility v)
 {
@@ -232,18 +235,74 @@ void format_posts_for_client(char *buf, int buf_size, struct Post *posts, int co
 
         const char *vis_str = visibility_to_string(posts[i].vis);
 
+        char timebuf[64] = {0};
+        time_t t = (time_t)posts[i].created_at;
+        struct tm tm_info;
+        localtime_r(&t, &tm_info);
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm_info);
+
         offset += snprintf(buf + offset, buf_size - offset,
             "\033[90m========== Post #%d ==========\033[0m\n"
             "\033[35mID:\033[0m %d\n"
             "\033[35mAuthor:\033[0m \033[36m%s\033[0m\n"
+            "\033[35mTime:\033[0m \033[34m%s\033[0m\n"
             "\033[35mVisibility:\033[0m \033[33m%s\033[0m\n"
             "\033[35mContent:\033[0m\n%s\n\n",
             posts[i].id,
             posts[i].id,
             posts[i].author_name,
+            timebuf,
             vis_str,
             posts[i].content);
     }
+}
+
+static void write_all(int fd, const char *buf, size_t len)
+{
+    size_t off = 0;
+    while (off < len) {
+        ssize_t n = write(fd, buf + off, len - off);
+        if (n <= 0) return;
+        off += (size_t)n;
+    }
+}
+
+void posts_send_for_client(int client_fd, struct Post *posts, int count)
+{
+    char out[2048];
+    int off = 0;
+
+    off = snprintf(out, sizeof(out), "\033[32mOK\033[0m\nPOSTS %d\n\n", count);
+    write_all(client_fd, out, (size_t)off);
+
+    for (int i = 0; i < count; i++) {
+        const char *vis_str = visibility_to_string(posts[i].vis);
+
+        char timebuf[64] = {0};
+        time_t t = (time_t)posts[i].created_at;
+        struct tm tm_info;
+        localtime_r(&t, &tm_info);
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm_info);
+
+        off = snprintf(out, sizeof(out),
+        "\033[90m========== Post #%d ==========\033[0m\n"
+        "\033[35mID:\033[0m %d\n"
+        "\033[35mAuthor:\033[0m \033[36m%s\033[0m\n"
+        "\033[35mTime:\033[0m \033[34m%s\033[0m\n"
+        "\033[35mVisibility:\033[0m \033[33m%s\033[0m\n"
+        "\033[35mContent:\033[0m\n%s\n\n",
+            posts[i].id,
+            posts[i].id,
+            posts[i].author_name,
+            timebuf,
+            vis_str,
+            posts[i].content
+        );
+
+        write_all(client_fd, out, (size_t)off);
+    }
+
+    write_all(client_fd, "END\n", 4);
 }
 
 int posts_delete(int requester_id, int post_id)
@@ -380,7 +439,7 @@ int posts_get_for_user(int viewer_id, int target_user_id,
     if (is_admin || (viewer_id > 0 && viewer_id == target_user_id))
     {
         const char *sql_all =
-            "SELECT p.id, p.author_id, u.name, p.visibility, p.content "
+            "SELECT p.id, p.author_id, u.name, p.visibility, p.content, p.created_at "
             "FROM posts p "
             "JOIN users u ON u.id = p.author_id "
             "WHERE p.author_id = ? "
@@ -401,9 +460,10 @@ int posts_get_for_user(int viewer_id, int target_user_id,
 
         while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size)
         {
-            out_array[count].id        = sqlite3_column_int(stmt, 0);
-            out_array[count].author_id = sqlite3_column_int(stmt, 1);
-            out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
+            out_array[count].id         = sqlite3_column_int(stmt, 0);
+            out_array[count].author_id  = sqlite3_column_int(stmt, 1);
+            out_array[count].vis        = (enum post_visibility)sqlite3_column_int(stmt, 3);
+            out_array[count].created_at = sqlite3_column_int(stmt, 5);
 
             const char *name = (const char *)sqlite3_column_text(stmt, 2);
             const char *txt  = (const char *)sqlite3_column_text(stmt, 4);
@@ -433,7 +493,7 @@ int posts_get_for_user(int viewer_id, int target_user_id,
         }
 
         const char *sql_public =
-            "SELECT p.id, p.author_id, u.name, p.visibility, p.content "
+            "SELECT p.id, p.author_id, u.name, p.visibility, p.content, p.created_at "
             "FROM posts p "
             "JOIN users u ON u.id = p.author_id "
             "WHERE p.author_id = ? AND p.visibility = ? "
@@ -455,9 +515,10 @@ int posts_get_for_user(int viewer_id, int target_user_id,
 
         while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size)
         {
-            out_array[count].id        = sqlite3_column_int(stmt, 0);
-            out_array[count].author_id = sqlite3_column_int(stmt, 1);
-            out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
+            out_array[count].id         = sqlite3_column_int(stmt, 0);
+            out_array[count].author_id  = sqlite3_column_int(stmt, 1);
+            out_array[count].vis        = (enum post_visibility)sqlite3_column_int(stmt, 3);
+            out_array[count].created_at = sqlite3_column_int(stmt, 5);
 
             const char *name = (const char *)sqlite3_column_text(stmt, 2);
             const char *txt  = (const char *)sqlite3_column_text(stmt, 4);
@@ -556,7 +617,7 @@ int posts_get_for_user(int viewer_id, int target_user_id,
     }
 
     const char *sql_sel =
-        "SELECT p.id, p.author_id, u.name, p.visibility, p.content "
+        "SELECT p.id, p.author_id, u.name, p.visibility, p.content, p.created_at "
         "FROM posts p "
         "JOIN users u ON u.id = p.author_id "
         "WHERE p.author_id = ? AND ( "
@@ -588,9 +649,10 @@ int posts_get_for_user(int viewer_id, int target_user_id,
 
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW && count < max_size)
     {
-        out_array[count].id        = sqlite3_column_int(stmt, 0);
-        out_array[count].author_id = sqlite3_column_int(stmt, 1);
-        out_array[count].vis       = (enum post_visibility)sqlite3_column_int(stmt, 3);
+        out_array[count].id         = sqlite3_column_int(stmt, 0);
+        out_array[count].author_id  = sqlite3_column_int(stmt, 1);
+        out_array[count].vis        = (enum post_visibility)sqlite3_column_int(stmt, 3);
+        out_array[count].created_at = sqlite3_column_int(stmt, 5);
 
         const char *name = (const char *)sqlite3_column_text(stmt, 2);
         const char *txt  = (const char *)sqlite3_column_text(stmt, 4);

@@ -332,3 +332,56 @@ void format_messages_for_client(char *buf, size_t buf_size, struct Message *msgs
                            m->content);
     }
 }
+
+static void write_all(int fd, const char *buf, size_t len)
+{
+    size_t off = 0;
+    while (off < len) {
+        ssize_t n = write(fd, buf + off, len - off);
+        if (n <= 0) return;
+        off += (size_t)n;
+    }
+}
+
+void messages_send_for_client(int client_fd,
+                              struct Message *msgs, int count,
+                              int current_user_id)
+{
+    char out[4096];
+    int off = 0;
+
+    off = snprintf(out, sizeof(out),
+                   "\033[32mOK\033[0m\nMESSAGES %d\n\n", count);
+    write_all(client_fd, out, (size_t)off);
+
+    for (int i = 0; i < count; i++) {
+        struct Message *m = &msgs[i];
+
+        char timebuf[64] = {0};
+        time_t t = (time_t)m->created_at;
+        struct tm tm_info;
+        localtime_r(&t, &tm_info);
+        strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", &tm_info);
+
+        const char *side = msg_side_label(m->sender_id, current_user_id);
+        const char *sender_color = msg_sender_color(m->sender_id, current_user_id);
+
+        off = snprintf(out, sizeof(out),
+                       "\033[90m========== Message #%d ==========\033[0m\n"
+                       "\033[35mConversation:\033[0m %d\n"
+                       "\033[35mFrom:\033[0m %s%s\033[0m (%s)\n"
+                       "\033[35mTime:\033[0m \033[34m%s\033[0m\n"
+                       "\033[35mContent:\033[0m\n%s\n\n",
+                       m->id,
+                       m->conversation_id,
+                       sender_color,
+                       m->sender_name,
+                       side,
+                       timebuf,
+                       m->content);
+
+        write_all(client_fd, out, (size_t)off);
+    }
+
+    write_all(client_fd, "END\n", 4);
+}
