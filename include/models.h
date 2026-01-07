@@ -6,6 +6,8 @@
 #define MAX_USERS 100
 #define MAX_SESSIONS 100
 #define MAX_SESSIONS 100
+#define MAX_NOTIF_TYPE 100
+#define MAX_NOTIF_PAYLOAD 1024
 
 
 enum user_type {USER_NORMAL, USER_ADMIN};
@@ -45,5 +47,20 @@ struct Friendship
     enum friend_type type;
 };
 
+struct Notification
+{
+    int id;
+    int user_id;
+    char type[MAX_NOTIF_TYPE];
+    char payload[MAX_NOTIF_PAYLOAD];
+    int created_at;
+};
+
+struct FriendRequestInfo
+{
+    int from_id;
+    char from_name[64];
+    int created_at;
+};
 
 #endif

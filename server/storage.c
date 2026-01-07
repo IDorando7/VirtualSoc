@@ -173,6 +173,42 @@ int storage_init(const char *path)
         return -1;
     }
 
+    const char *sql_notifications =
+        "CREATE TABLE IF NOT EXISTS notifications ("
+        "id         INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "user_id    INTEGER NOT NULL,"
+        "type       TEXT    NOT NULL,"
+        "payload    TEXT    NOT NULL,"
+        "created_at INTEGER NOT NULL,"
+        "deleted    INTEGER NOT NULL DEFAULT 0,"
+        "FOREIGN KEY(user_id) REFERENCES users(id)"
+        ");";
+
+    rc = sqlite3_exec(g_db, sql_notifications, NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK)
+    {
+        fprintf(stderr, "[storage] Cannot create notifications table: %s\n", errmsg);
+        sqlite3_free(errmsg);
+        return -1;
+    }
+
+    const char *sql_friend_requests =
+    "CREATE TABLE IF NOT EXISTS friend_requests ("
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    "  from_id INTEGER NOT NULL,"
+    "  to_id INTEGER NOT NULL,"
+    "  created_at INTEGER NOT NULL,"
+    "  UNIQUE(from_id, to_id)"
+    ");";
+
+    rc = sqlite3_exec(g_db, sql_friend_requests, NULL, NULL, &errmsg);
+    if (rc != SQLITE_OK)
+    {
+        fprintf(stderr, "[storage] Cannot create friend_requests table: %s\n", errmsg);
+        sqlite3_free(errmsg);
+        return -1;
+    }
+
     printf("[storage] Database initialized successfully.\n");
     return 0;
 }

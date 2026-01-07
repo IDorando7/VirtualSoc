@@ -16,6 +16,7 @@ SERVER_SRC = \
     server/sessions.c \
     server/groups.c \
     server/notify_server.c \
+    server/notifications.c \
     client/utils_client.c\
     $(COMMON_SRC)
 

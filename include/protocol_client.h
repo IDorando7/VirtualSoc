@@ -30,3 +30,8 @@ void cmd_set_group_vis(int sockfd, const char *arg1, const char *arg2);
 void cmd_kick_member(int sockfd, const char *arg1, const char *arg2);
 void cmd_get_requests(int sockfd, const char *arg1);
 void cmd_reject_request(int sockfd, const char *arg1, const char *arg2);
+void cmd_view_notifs(int sockfd);
+void cmd_delete_notifs(int sockfd);
+void cmd_view_friend_requests(int sockfd);
+void cmd_accept_friend(int sockfd, const char *user);
+void cmd_reject_friend(int sockfd, const char *user);

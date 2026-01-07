@@ -6,6 +6,7 @@
 
 int main(void)
 {
+    signal(SIGPIPE, SIG_IGN);
     if (sodium_init() < 0)
     {
         fprintf(stderr, "libsodium init failed!\n");

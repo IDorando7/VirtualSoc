@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include "response.h"
 #include "helpers.h"
+#include "notifications.h"
 
 void command_dispatch(int client)
 {
@@ -43,7 +44,7 @@ void command_dispatch(int client)
 
         printf("[Thread]Message received...%s\n", buffer);
 
-        char *cmd  = NULL;
+        char *cmd = NULL;
         char *arg1 = NULL;
         char *arg2 = NULL;
         Parser(buffer, &cmd, &arg1, &arg2);
@@ -241,14 +242,6 @@ void command_dispatch(int client)
 
         if (strcmp(cmd, CMD_ADD_FRIEND) == 0)
         {
-            int target_id = auth_get_user_id_by_name(arg1);
-            if (target_id < 0)
-            {
-                build_error(response, sizeof(response), ERR_USER_NOT_FOUND, "User doesn't exist.");
-                write(client, response, strlen(response));
-                continue;
-            }
-
             int me_id = auth_get_user_id(client);
             if (me_id < 0)
             {
@@ -257,28 +250,83 @@ void command_dispatch(int client)
                 continue;
             }
 
-            int ok = friends_add(me_id, target_id, FRIEND_NORMAL);
-            if (ok < 0)
+            if (!arg1)
             {
-                build_error(response, sizeof(response), ERR_INTERNAL, "Internal error. Can't add friend.");
+                build_error(response, sizeof(response), ERR_BAD_ARGS, "Usage: ADD_FRIEND <username>");
                 write(client, response, strlen(response));
                 continue;
             }
 
-            char name[64];
-            name[0] = '\0';
-            auth_get_username_by_id(me_id, name, sizeof(name));
+            int other_id = auth_get_user_id_by_name(arg1);
+            if (other_id < 0)
+            {
+                build_error(response, sizeof(response), ERR_USER_NOT_FOUND, "User doesn't exist.");
+                write(client, response, strlen(response));
+                continue;
+            }
 
-            char payload[1800];
-            snprintf(payload, sizeof(payload), ": %s", name);
-            char notif[2048];
-            build_notif(notif, sizeof(notif), "FRIEND_REQUEST", payload);
-            notify_user(target_id, notif);
+            int acc = friends_request_accept(me_id, arg1);
+            if (acc == 1)
+            {
+                build_ok(response, sizeof(response), "Friend request accepted.");
+                write(client, response, strlen(response));
 
-            build_ok(response, sizeof(response), "Add friend");
+                char me_name[64];
+                if (auth_get_username_by_id(me_id, me_name, sizeof(me_name)) >= 0)
+                {
+                    char payload[256];
+                    snprintf(payload, sizeof(payload), "%s", me_name);
+
+                    char notif[512];
+                    build_notif(notif, sizeof(notif), "FRIEND_ACCEPTED", payload);
+                    notify_user(other_id, notif);
+                }
+
+                continue;
+            }
+            if (acc == 2)
+            {
+                build_info(response, sizeof(response), "Already friends.");
+                write(client, response, strlen(response));
+                continue;
+            }
+            if (acc < 0 && acc != 0)
+            {
+                build_error(response, sizeof(response), ERR_INTERNAL, "Internal error.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = friends_request_send(me_id, other_id);
+
+            if (rc == 0)
+            {
+                build_ok(response, sizeof(response), "Friend request sent.");
+                write(client, response, strlen(response));
+
+                char me_name[64];
+                if (auth_get_username_by_id(me_id, me_name, sizeof(me_name)) >= 0)
+                {
+                    char payload[256];
+                    snprintf(payload, sizeof(payload), "%s", me_name);
+
+                    char notif[512];
+                    build_notif(notif, sizeof(notif), "FRIEND_REQUEST", payload);
+                    notify_user(other_id, notif);
+                }
+                continue;
+            }
+
+            if (rc == 1) build_info(response, sizeof(response), "Already friends.");
+            else if (rc == 2) build_info(response, sizeof(response), "Request already pending.");
+            else if (rc == 3) build_info(response, sizeof(response),
+                                         "They already requested you. Use add <user> to accept.");
+            else build_error(response, sizeof(response), ERR_INTERNAL, "Could not create request.");
+
             write(client, response, strlen(response));
             continue;
         }
+
 
         if (strcmp(cmd, CMD_LIST_FRIENDS) == 0)
         {
@@ -403,7 +451,8 @@ void command_dispatch(int client)
             else if (ok == 0)
                 build_error(response, sizeof(response), ERR_POST_NOT_FOUND, "Post not found.");
             else if (ok == -2)
-                build_error(response, sizeof(response), ERR_NO_PERMISSION, "You can only delete your own posts (unless you are admin).");
+                build_error(response, sizeof(response), ERR_NO_PERMISSION,
+                            "You can only delete your own posts (unless you are admin).");
             else
                 build_error(response, sizeof(response), ERR_INTERNAL, "Could not delete post.");
 
@@ -687,7 +736,7 @@ void command_dispatch(int client)
 
             int member_ids[2048];
             int member_count = groups_list_member_ids(group_name, member_ids,
-                                                     (int)(sizeof(member_ids)/sizeof(member_ids[0])));
+                                                      (int) (sizeof(member_ids) / sizeof(member_ids[0])));
             if (member_count < 0)
                 continue;
 
@@ -763,14 +812,12 @@ void command_dispatch(int client)
                 build_error(response, sizeof(response), ERR_GROUP_NOT_FOUND, "Group not found.");
                 write(client, response, strlen(response));
                 continue;
-            }
-            else if (rc == GROUP_ERR_NO_PERMISSION)
+            } else if (rc == GROUP_ERR_NO_PERMISSION)
             {
                 build_error(response, sizeof(response), ERR_NO_PERMISSION, "You are not a member of this group.");
                 write(client, response, strlen(response));
                 continue;
-            }
-            else if (rc < 0)
+            } else if (rc < 0)
             {
                 build_error(response, sizeof(response), ERR_INTERNAL, "Internal error.");
                 write(client, response, strlen(response));
@@ -781,7 +828,7 @@ void command_dispatch(int client)
             int off = 0;
             off += snprintf(resp + off, sizeof(resp) - off, "INFO Members of group %s:\n", arg1);
 
-            for (int i = 0; i < rc && off < (int)sizeof(resp); i++)
+            for (int i = 0; i < rc && off < (int) sizeof(resp); i++)
             {
                 off += snprintf(resp + off, sizeof(resp) - off,
                                 " - %s%s\n",
@@ -826,12 +873,11 @@ void command_dispatch(int client)
             {
                 off += snprintf(resp + off, sizeof(resp) - off,
                                 "INFO You are not a member of any group.\n");
-            }
-            else
+            } else
             {
                 off += snprintf(resp + off, sizeof(resp) - off,
                                 "INFO Your groups:\n");
-                for (int i = 0; i < count && off < (int)sizeof(resp); i++)
+                for (int i = 0; i < count && off < (int) sizeof(resp); i++)
                 {
                     off += snprintf(resp + off, sizeof(resp) - off,
                                     " - %s%s%s\n",
@@ -918,7 +964,8 @@ void command_dispatch(int client)
             else if (rc == GROUP_ERR_NOT_FOUND)
                 build_error(response, sizeof(response), ERR_GROUP_NOT_FOUND, "Group not found.");
             else if (rc == GROUP_ERR_NOT_ADMIN)
-                build_error(response, sizeof(response), ERR_NO_PERMISSION, "Only group owner/admin can change visibility.");
+                build_error(response, sizeof(response), ERR_NO_PERMISSION,
+                            "Only group owner/admin can change visibility.");
             else
                 build_error(response, sizeof(response), ERR_INTERNAL, "Could not change group visibility.");
 
@@ -952,7 +999,8 @@ void command_dispatch(int client)
             else if (rc == GROUP_ERR_NOT_ADMIN)
                 build_error(response, sizeof(response), ERR_NO_PERMISSION, "You must be group admin or owner.");
             else if (rc == GROUP_ERR_NO_PERMISSION)
-                build_error(response, sizeof(response), ERR_NO_PERMISSION, "Cannot remove this user (owner or not in group).");
+                build_error(response, sizeof(response), ERR_NO_PERMISSION,
+                            "Cannot remove this user (owner or not in group).");
             else
                 build_error(response, sizeof(response), ERR_INTERNAL, "Could not remove user from group.");
 
@@ -1006,7 +1054,7 @@ void command_dispatch(int client)
             offset += snprintf(resp + offset, sizeof(resp) - offset,
                                "OK JOIN_REQUESTS %d\n", count);
 
-            for (int i = 0; i < count && offset < (int)sizeof(resp) - 1; i++)
+            for (int i = 0; i < count && offset < (int) sizeof(resp) - 1; i++)
             {
                 offset += snprintf(resp + offset, sizeof(resp) - offset,
                                    " - %s (uid: %d)\n",
@@ -1049,6 +1097,164 @@ void command_dispatch(int client)
                 build_error(response, sizeof(response), ERR_INTERNAL, "Internal error.");
             else
                 build_ok(response, sizeof(response), "Join request rejected.");
+
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        if (strcmp(cmd, CMD_VIEW_NOTIFS) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0)
+            {
+                build_error(response, sizeof(response), ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            struct Notification ns[256];
+            int count = notifications_list(user_id, ns, 256);
+            if (count < 0)
+            {
+                build_error(response, sizeof(response), ERR_INTERNAL, "Could not load notifications.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            notifications_send_for_client(client, ns, count);
+            continue;
+        }
+
+        if (strcmp(cmd, CMD_DELETE_NOTIFS) == 0)
+        {
+            int user_id = auth_get_user_id(client);
+            if (user_id < 0)
+            {
+                build_error(response, sizeof(response), ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = notifications_delete_all(user_id);
+            if (rc < 0)
+            {
+                build_error(response, sizeof(response), ERR_INTERNAL, "Could not delete notifications.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            build_ok(response, sizeof(response), "Notifications cleared.");
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        if (strcmp(cmd, CMD_VIEW_FRIEND_REQUESTS) == 0)
+        {
+            int me_id = auth_get_user_id(client);
+            if (me_id < 0)
+            {
+                build_error(response, sizeof(response), ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            struct FriendRequestInfo reqs[128];
+            int count = friends_request_list(me_id, reqs, 128);
+            if (count < 0)
+            {
+                build_error(response, sizeof(response), ERR_INTERNAL, "Could not fetch friend requests.");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            char out[1024];
+            int off = snprintf(out, sizeof(out), "OK Friend requests\nFRIEND_REQUESTS %d\n\n", count);
+            write(client, out, (size_t) off);
+
+            for (int i = 0; i < count; i++)
+            {
+                char line[256];
+                snprintf(line, sizeof(line), " - %s\n", reqs[i].from_name);
+                write(client, line, strlen(line));
+            }
+
+            write(client, "END\n", 4);
+            continue;
+        }
+
+        if (strcmp(cmd, CMD_ACCEPT_FRIEND) == 0)
+        {
+            int me_id = auth_get_user_id(client);
+            if (me_id < 0)
+            {
+                build_error(response, sizeof(response), ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+            if (!arg1)
+            {
+                build_error(response, sizeof(response), ERR_BAD_ARGS, "Usage: ACCEPT_FRIEND <username>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = friends_request_accept(me_id, arg1);
+            if (rc == 1) build_ok(response, sizeof(response), "Friend request accepted.");
+            else if (rc == 0) build_error(response, sizeof(response), ERR_REQ_NOT_FOUND,
+                                          "No pending request from this user.");
+            else if (rc == 2) build_info(response, sizeof(response), "Already friends.");
+            else if (rc == -2) build_error(response, sizeof(response), ERR_USER_NOT_FOUND, "User not found.");
+            else build_error(response, sizeof(response), ERR_INTERNAL, "Internal error.");
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        if (strcmp(cmd, CMD_REJECT_FRIEND) == 0)
+        {
+            int me_id = auth_get_user_id(client);
+            if (me_id < 0)
+            {
+                build_error(response, sizeof(response), ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+            if (!arg1)
+            {
+                build_error(response, sizeof(response), ERR_BAD_ARGS, "Usage: REJECT_FRIEND <username>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = friends_request_reject(me_id, arg1);
+            if (rc == 1) build_ok(response, sizeof(response), "Friend request rejected.");
+            else if (rc == 0) build_error(response, sizeof(response), ERR_REQ_NOT_FOUND,
+                                          "No pending request from this user.");
+            else if (rc == -2) build_error(response, sizeof(response), ERR_USER_NOT_FOUND, "User not found.");
+            else build_error(response, sizeof(response), ERR_INTERNAL, "Internal error.");
+            write(client, response, strlen(response));
+            continue;
+        }
+
+        if (strcmp(cmd, CMD_ACCEPT_FRIEND) == 0)
+        {
+            int me_id = auth_get_user_id(client);
+            if (me_id < 0) {
+                build_error(response, sizeof(response), ERR_NOT_AUTH, "You must login first.");
+                write(client, response, strlen(response));
+                continue;
+            }
+            if (!arg1) {
+                build_error(response, sizeof(response), ERR_BAD_ARGS, "Usage: ACCEPT_FRIEND <username>");
+                write(client, response, strlen(response));
+                continue;
+            }
+
+            int rc = friends_request_accept(me_id, arg1);
+            if (rc == 1) build_ok(response, sizeof(response), "Friend request accepted.");
+            else if (rc == 0) build_error(response, sizeof(response), ERR_REQ_NOT_FOUND, "No pending request from this user.");
+            else if (rc == 2) build_info(response, sizeof(response), "Already friends.");
+            else if (rc == -2) build_error(response, sizeof(response), ERR_USER_NOT_FOUND, "User not found.");
+            else build_error(response, sizeof(response), ERR_INTERNAL, "Internal error.");
 
             write(client, response, strlen(response));
             continue;

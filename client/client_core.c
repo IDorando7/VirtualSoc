@@ -18,6 +18,13 @@ static void print_prompt(void)
     fflush(stdout);
 }
 
+static void ui_reprint_prompt(void)
+{
+    printf("\r\033[2K");
+    print_prompt();
+    fflush(stdout);
+}
+
 static void print_help(void)
 {
     printf("Available commands:\n");
@@ -51,6 +58,11 @@ static void print_help(void)
     printf("  kick_group <group> <user>\n");
     printf("  requests <group>\n");
     printf("  reject <group> <user>\n");
+    printf("  view_notifs\n");
+    printf("  delete_notifs\n");
+    printf("  friend_requests\n");
+    printf("  accept_friend <user>\n");
+    printf("  reject_friend <user>\n");
     printf("  exit\n");
 }
 
@@ -113,68 +125,71 @@ void client_loop(int sockfd)
             int n = (int)read(sockfd, chunk, sizeof(chunk));
             if (n < 0)
             {
+                printf("\r\033[2K");
                 ui_print_line("ERROR ERR_INTERNAL read() failed\n");
+                printf("\r\033[2K");
                 print_prompt();
+                fflush(stdout);
                 continue;
             }
             if (n == 0)
             {
+                printf("\r\033[2K");
                 ui_print_line("INFO Disconnected from server.\n");
+                fflush(stdout);
                 break;
             }
 
-            if (acc_len + (size_t)n >= sizeof(acc))
+            if (acc_len + (size_t)n >= sizeof(acc)) {
                 acc_len = 0;
+            }
 
             memcpy(acc + acc_len, chunk, (size_t)n);
             acc_len += (size_t)n;
 
-            int got_end = 0;
             size_t start = 0;
 
             for (size_t i = 0; i < acc_len; i++)
             {
-                if (acc[i] == '\n') {
-                    size_t line_len = i - start;
+                if (acc[i] != '\n') continue;
 
-                    char linebuf[8192];
-                    size_t copy_len = line_len;
-                    if (copy_len >= sizeof(linebuf)) copy_len = sizeof(linebuf) - 1;
+                size_t line_len = i - start;
 
-                    memcpy(linebuf, acc + start, copy_len);
-                    linebuf[copy_len] = '\0';
+                char linebuf[8192];
+                size_t copy_len = line_len;
+                if (copy_len >= sizeof(linebuf)) copy_len = sizeof(linebuf) - 1;
 
-                    if (strcmp(linebuf, "END") == 0)
-                    {
-                        size_t rest = acc_len - (i + 1);
-                        memmove(acc, acc + (i + 1), rest);
-                        acc_len = rest;
+                memcpy(linebuf, acc + start, copy_len);
+                linebuf[copy_len] = '\0';
 
-                        got_end = 1;
-                        start = 0;
-                        break;
-                    }
+                start = i + 1;
 
-                    char out[8200];
-                    snprintf(out, sizeof(out), "%s\n", linebuf);
-                    ui_print_line(out);
+                if (strcmp(linebuf, "END") == 0)
+                    break;
 
-                    start = i + 1;
-                }
+                char out[8200];
+                snprintf(out, sizeof(out), "%s\n", linebuf);
+
+                printf("\r\033[2K");
+                ui_print_line(out);
+                printf("\r\033[2K");
+                print_prompt();
+                fflush(stdout);
             }
 
-            if (!got_end && start > 0)
+            if (start > 0)
             {
                 size_t rest = acc_len - start;
                 memmove(acc, acc + start, rest);
                 acc_len = rest;
             }
-
-            if (got_end)
-                print_prompt();
+            printf("\r\033[2K");
+            print_prompt();
+            fflush(stdout);
 
             continue;
         }
+
 
         if (FD_ISSET(STDIN_FILENO, &readfds))
         {
@@ -458,6 +473,38 @@ void client_loop(int sockfd)
             if (strcmp(cmd, "reject") == 0) {
                 if (!arg1 || !arg2) { printf("Usage: reject <group> <user>\n"); print_prompt(); continue; }
                 cmd_reject_request(sockfd, arg1, arg2);
+                print_prompt();
+                continue;
+            }
+
+            if (strcmp(cmd, "view_notifs") == 0) {
+                cmd_view_notifs(sockfd);
+                print_prompt();
+                continue;
+            }
+
+            if (strcmp(cmd, "delete_notifs") == 0) {
+                cmd_delete_notifs(sockfd);
+                print_prompt();
+                continue;
+            }
+
+            if (strcmp(cmd, "friend_requests") == 0) {
+                cmd_view_friend_requests(sockfd);
+                print_prompt();
+                continue;
+            }
+
+            if (strcmp(cmd, "accept_friend") == 0) {
+                if (!arg1) { printf("Usage: accept_friend <user>\n"); print_prompt(); continue; }
+                cmd_accept_friend(sockfd, arg1);
+                print_prompt();
+                continue;
+            }
+
+            if (strcmp(cmd, "reject_friend") == 0) {
+                if (!arg1) { printf("Usage: reject_friend <user>\n"); print_prompt(); continue; }
+                cmd_reject_friend(sockfd, arg1);
                 print_prompt();
                 continue;
             }

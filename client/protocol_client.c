@@ -245,3 +245,38 @@ void cmd_reject_request(int sockfd, const char *arg1, const char *arg2)
     snprintf(req, sizeof(req), "%s %s %s\n", CMD_REJECT_GROUP_REQUEST, arg1, arg2);
     send_and_print(sockfd, req);
 }
+
+void cmd_view_notifs(int sockfd)
+{
+    char buf[MAX_CMD_LEN];
+    snprintf(buf, sizeof(buf), "%s\n", CMD_VIEW_NOTIFS);
+    send_and_print(sockfd, buf);
+}
+
+void cmd_delete_notifs(int sockfd)
+{
+    char buf[MAX_CMD_LEN];
+    snprintf(buf, sizeof(buf), "%s\n", CMD_DELETE_NOTIFS);
+    send_and_print(sockfd, buf);
+}
+
+void cmd_view_friend_requests(int sockfd)
+{
+    char buf[MAX_CMD_LEN];
+    snprintf(buf, sizeof(buf), "%s\n", CMD_VIEW_FRIEND_REQUESTS);
+    send_and_print(sockfd, buf);
+}
+
+void cmd_accept_friend(int sockfd, const char *user)
+{
+    char buf[MAX_CMD_LEN];
+    snprintf(buf, sizeof(buf), "%s %s\n", CMD_ACCEPT_FRIEND, user);
+    send_and_print(sockfd, buf);
+}
+
+void cmd_reject_friend(int sockfd, const char *user)
+{
+    char buf[MAX_CMD_LEN];
+    snprintf(buf, sizeof(buf), "%s %s\n", CMD_REJECT_FRIEND, user);
+    send_and_print(sockfd, buf);
+}
